@@ -1,0 +1,42 @@
+{
+  "name": "delta-trading-terminal",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "lint": "eslint src",
+    "format": "prettier --write src",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "zustand": "5.0.0"
+  },
+  "devDependencies": {
+    "@babel/core": "8.0.1",
+    "@babel/eslint-parser": "8.0.1",
+    "@babel/preset-react": "8.0.1",
+    "@babel/preset-typescript": "8.0.1",
+    "@eslint/js": "9.0.0",
+    "@types/react": "19.0.0",
+    "@types/react-dom": "19.0.0",
+    "@vitejs/plugin-react": "5.2.0",
+    "@vitest/ui": "3.2.7",
+    "eslint": "9.0.0",
+    "eslint-plugin-react-hooks": "5.0.0",
+    "eslint-plugin-react-refresh": "0.4.0",
+    "globals": "15.0.0",
+    "jsdom": "25.0.0",
+    "prettier": "3.3.0",
+    "typescript": "7.0.2",
+    "vite": "6.4.3",
+    "vitest": "3.2.7"
+  }
+}
