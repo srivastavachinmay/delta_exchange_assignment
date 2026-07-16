@@ -1,0 +1,30 @@
+.shell {
+  display: grid;
+  grid-template-rows: 36px 48px 1fr;
+  grid-template-columns: 1fr 340px;
+  grid-template-areas:
+    'status  status'
+    'ticker  ticker'
+    'book    trades';
+  height: 100dvh;
+  overflow: hidden;
+  background-color: var(--color-bg-base);
+  color: var(--color-text-primary);
+}
+
+@media (max-width: 960px) {
+  .shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: 36px 48px 1fr 1fr;
+    grid-template-areas:
+      'status'
+      'ticker'
+      'book'
+      'trades';
+  }
+}
+
+.statusArea  { grid-area: status; }
+.tickerArea  { grid-area: ticker; }
+.bookArea    { grid-area: book; }
+.tradesArea  { grid-area: trades; }

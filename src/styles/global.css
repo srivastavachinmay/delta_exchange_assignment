@@ -1,0 +1,76 @@
+/* Global reset and base styles for the trading terminal */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* Color tokens — trading terminal dark palette */
+  --color-bg-base:        #080b12;
+  --color-bg-surface:     #0d1117;
+  --color-bg-elevated:    #0f1117;
+  --color-border:         #1e2130;
+  --color-border-subtle:  #151a27;
+
+  --color-text-primary:   #e2e8f0;
+  --color-text-secondary: #9ca3af;
+  --color-text-muted:     #4b5563;
+  --color-text-disabled:  #374151;
+
+  /* Semantic: price movement */
+  --color-bid:  #22c55e;  /* green — buy side */
+  --color-ask:  #ef4444;  /* red — sell side */
+  --color-neutral: #94a3b8;
+
+  /* Connection states */
+  --color-connected:    #22c55e;
+  --color-reconnecting: #f59e0b;
+  --color-error:        #ef4444;
+
+  /* Typography */
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Roboto Mono', monospace;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+
+  /* Layout */
+  --header-height: 36px;
+  --ticker-height: 48px;
+}
+
+html,
+body {
+  height: 100%;
+  background-color: var(--color-bg-base);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  height: 100%;
+}
+
+/* Scrollbar styling for trading panels */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-base);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2d3748;
+}
