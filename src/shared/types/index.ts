@@ -1,6 +1,7 @@
 export type {
   TradingSymbol,
   Channel,
+  ChannelEntry,
   OutboundMessage,
   SubscribeMessage,
   UnsubscribeMessage,

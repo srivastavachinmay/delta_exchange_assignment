@@ -33,19 +33,23 @@ export type Channel =
 // Outbound messages (client → server)
 // ---------------------------------------------------------------------------
 
+/** One entry in the channels array of a subscribe/unsubscribe payload. */
+export interface ChannelEntry {
+  readonly name: Channel;
+  readonly symbols: readonly TradingSymbol[];
+}
+
 export interface SubscribeMessage {
   readonly type: 'subscribe';
   readonly payload: {
-    readonly channels: Channel[];
-    readonly symbols: TradingSymbol[];
+    readonly channels: readonly ChannelEntry[];
   };
 }
 
 export interface UnsubscribeMessage {
   readonly type: 'unsubscribe';
   readonly payload: {
-    readonly channels: Channel[];
-    readonly symbols: TradingSymbol[];
+    readonly channels: readonly ChannelEntry[];
   };
 }
 

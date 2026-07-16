@@ -7,6 +7,7 @@ import type {
 } from '@/domain/ports/MarketDataPort';
 import type { MessageRouterPort } from '@/domain/ports/MessageRouterPort';
 import type { WebSocketManager } from './WebSocketManager';
+import type { SubscriptionManager } from './SubscriptionManager';
 
 export class WebSocketAdapter implements MarketDataPort {
   private readonly tickerHandlers = new Set<TickerHandler>();
@@ -16,8 +17,16 @@ export class WebSocketAdapter implements MarketDataPort {
   constructor(
     private readonly router: MessageRouterPort,
     private readonly manager: WebSocketManager,
-  ) {
-    manager.registerListener((raw) => this.router.route(raw));
+    private readonly subscriptionManager: SubscriptionManager,
+  ) {}
+
+  /**
+   * Wire all listeners and handlers. Call once from the composition root
+   * after constructing all collaborators, before connect().
+   */
+  initialize(): void {
+    this.manager.registerListener((raw) => this.router.route(raw));
+    this.manager.registerReadyListener(() => this.subscriptionManager.replayAll());
 
     this.router.registerHandler('ticker', (msg) => {
       if (msg.channel !== 'ticker') return;
@@ -48,11 +57,11 @@ export class WebSocketAdapter implements MarketDataPort {
   }
 
   subscribe(symbol: TradingSymbol, channel: Channel): void {
-    this.manager.subscribe(symbol, channel);
+    this.subscriptionManager.subscribe(channel, symbol);
   }
 
   unsubscribe(symbol: TradingSymbol, channel: Channel): void {
-    this.manager.unsubscribe(symbol, channel);
+    this.subscriptionManager.unsubscribe(channel, symbol);
   }
 
   connect(): void {

@@ -1,4 +1,4 @@
-import type { Channel, TradingSymbol, OutboundMessage, ConnectionStatusCallbacks } from '@/shared/types';
+import type { OutboundMessage, ConnectionStatusCallbacks } from '@/shared/types';
 import {
   computeBackoffDelay,
   RECONNECT_MAX_ATTEMPTS,
@@ -7,6 +7,7 @@ import {
 import { INFRASTRUCTURE_CONFIG } from '@/infrastructure/config/SymbolConfig';
 
 type RawMessageListener = (raw: string) => void;
+type ReadyListener = () => void;
 
 export class WebSocketManager {
   // -------------------------------------------------------------------------
@@ -35,16 +36,13 @@ export class WebSocketManager {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
-  /**
-   * Active subscription registry. Keyed by `${symbol}:${channel}`.
-   * Persists across reconnects — replayed in _replaySubscriptions().
-   */
-  private readonly subscriptions = new Map<
-    string,
-    { symbol: TradingSymbol; channel: Channel }
-  >();
-
   private readonly listeners = new Set<RawMessageListener>();
+
+  /**
+   * Fired on every socket open, including reconnects.
+   * SubscriptionManager registers here to replay desired subscriptions.
+   */
+  private readonly readyListeners = new Set<ReadyListener>();
 
   /** True when disconnect() was called intentionally — suppresses reconnect. */
   private intentionalDisconnect = false;
@@ -86,20 +84,9 @@ export class WebSocketManager {
     this.statusCallbacks?.onStatus('disconnected');
   }
 
-  subscribe(symbol: TradingSymbol, channel: Channel): void {
-    const key = `${symbol}:${channel}`;
-    if (this.subscriptions.has(key)) return;
-
-    this.subscriptions.set(key, { symbol, channel });
-    this.send({ type: 'subscribe', payload: { channels: [channel], symbols: [symbol] } });
-  }
-
-  unsubscribe(symbol: TradingSymbol, channel: Channel): void {
-    const key = `${symbol}:${channel}`;
-    if (!this.subscriptions.has(key)) return;
-
-    this.subscriptions.delete(key);
-    this.send({ type: 'unsubscribe', payload: { channels: [channel], symbols: [symbol] } });
+  send(message: OutboundMessage): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.socket.send(JSON.stringify(message));
   }
 
   registerListener(listener: RawMessageListener): void {
@@ -110,9 +97,12 @@ export class WebSocketManager {
     this.listeners.delete(listener);
   }
 
-  send(message: OutboundMessage): void {
-    if (this.socket?.readyState !== WebSocket.OPEN) return;
-    this.socket.send(JSON.stringify(message));
+  registerReadyListener(listener: ReadyListener): void {
+    this.readyListeners.add(listener);
+  }
+
+  removeReadyListener(listener: ReadyListener): void {
+    this.readyListeners.delete(listener);
   }
 
   destroy(): void {
@@ -122,7 +112,7 @@ export class WebSocketManager {
     this.socket = null;
     this.reconnectAttempt = 0;
     this.listeners.clear();
-    this.subscriptions.clear();
+    this.readyListeners.clear();
     this.statusCallbacks?.onStatus('disconnected');
     WebSocketManager.instance = null;
   }
@@ -143,7 +133,7 @@ export class WebSocketManager {
       this.reconnectAttempt = 0;
       this.statusCallbacks?.onConnected(Date.now());
       this._startHeartbeat();
-      this._replaySubscriptions();
+      this.readyListeners.forEach((l) => l());
     };
 
     socket.onmessage = ({ data }: MessageEvent<string>) => {
@@ -177,23 +167,6 @@ export class WebSocketManager {
       this.reconnectAttempt++;
       this._openSocket();
     }, delay);
-  }
-
-  private _replaySubscriptions(): void {
-    if (this.subscriptions.size === 0) return;
-
-    const symbols = new Set<TradingSymbol>();
-    const channels = new Set<Channel>();
-
-    this.subscriptions.forEach(({ symbol, channel }) => {
-      symbols.add(symbol);
-      channels.add(channel);
-    });
-
-    this.send({
-      type: 'subscribe',
-      payload: { channels: [...channels], symbols: [...symbols] },
-    });
   }
 
   private _startHeartbeat(): void {
