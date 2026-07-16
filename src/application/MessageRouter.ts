@@ -1,72 +1,59 @@
-/**
- * MessageRouter — dispatches inbound WebSocket messages to channel handlers.
- *
- * Application layer responsibility:
- * - Receives raw JSON strings from the infrastructure adapter
- * - Parses and validates message shape
- * - Routes to the correct handler based on channel
- *
- * Future pipeline integration (Phase 5):
- * Currently, route() calls handlers directly.
- * After Phase 5, route() will enqueue into MessageQueue instead.
- * The RAF loop will drain the queue and call handlers once per frame.
- * Call sites don't change — only this class's route() implementation changes.
- *
- * Open/Closed: adding a new channel = register a new handler.
- * No modification to the routing switch.
- */
-
 import type { InboundMessage, Channel } from '@/shared/types';
 import type { SubscriptionHandler } from './SubscriptionHandler';
 import type { MessageRouterPort, ChannelHandler } from '@/domain/ports/MessageRouterPort';
 
 export type ChannelMessageHandler = ChannelHandler;
 
+// Maps Delta Exchange wire channel names → internal Channel names.
+// Incoming messages carry wire names; handlers are registered with internal names.
+const WIRE_TO_CHANNEL: Readonly<Partial<Record<string, Channel>>> = {
+  'v2/ticker': 'ticker',
+  l2_orderbook: 'orderbook',
+  all_trades: 'trades',
+  subscription: 'subscription',
+  connection: 'connection',
+};
+
 export class MessageRouter implements MessageRouterPort {
-  private readonly handlers = new Map<Channel, ChannelMessageHandler>();
+  private readonly handlers = new Map<Channel, Set<ChannelMessageHandler>>();
 
   constructor(private readonly subscriptionHandler: SubscriptionHandler) {
-    // Subscription acks are handled at the application layer.
-    // Ticker/OrderBook/Trades handlers are registered in Phase 2/3/4.
-    this.handlers.set('subscription', (msg) => {
+    this.registerHandler('subscription', (msg) => {
       this.subscriptionHandler.handle(msg);
     });
   }
 
-  /**
-   * Register a handler for a specific channel.
-   * Later phases call this to plug in their handlers.
-   */
   registerHandler(channel: Channel, handler: ChannelMessageHandler): void {
-    this.handlers.set(channel, handler);
+    let set = this.handlers.get(channel);
+    if (!set) {
+      set = new Set<ChannelMessageHandler>();
+      this.handlers.set(channel, set);
+    }
+    set.add(handler);
   }
 
-  /**
-   * Parse a raw JSON string and dispatch to the correct handler.
-   * Called by the WebSocketAdapter on every incoming message.
-   *
-   * Phase 5: replace direct dispatch with MessageQueue.enqueue().
-   */
+  removeHandler(channel: Channel): void {
+    this.handlers.delete(channel);
+  }
+
   route(raw: string): void {
     const message = this.parse(raw);
     if (!message) return;
 
-    const handler = this.handlers.get(message.channel);
-    if (!handler) {
-      // Unknown channels are silently dropped — exchange may add new channels.
-      return;
-    }
+    const channel = WIRE_TO_CHANNEL[message.channel as string];
+    if (!channel) return;
 
-    handler(message);
+    const handlers = this.handlers.get(channel);
+    if (!handlers || handlers.size === 0) return;
+
+    handlers.forEach((h) => h(message));
   }
 
   private parse(raw: string): InboundMessage | null {
     try {
       const parsed: unknown = JSON.parse(raw);
-      if (!isInboundMessage(parsed)) return null;
-      return parsed;
+      return isInboundMessage(parsed) ? parsed : null;
     } catch {
-      console.warn('[MessageRouter] JSON parse failure');
       return null;
     }
   }
