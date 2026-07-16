@@ -6,6 +6,12 @@ import {
 } from '@/shared/constants/websocket';
 import { INFRASTRUCTURE_CONFIG } from '@/infrastructure/config/SymbolConfig';
 
+/**
+ * Pre-serialized heartbeat ping. Sent at the transport level — not a typed
+ * OutboundMessage because heartbeat is not a subscription-protocol concern.
+ */
+const HEARTBEAT_PING = JSON.stringify({ type: 'heartbeat' });
+
 type RawMessageListener = (raw: string) => void;
 type ReadyListener = () => void;
 
@@ -130,6 +136,7 @@ export class WebSocketManager {
     this.socket = socket;
 
     socket.onopen = () => {
+      if (this.socket !== socket) return;
       this.reconnectAttempt = 0;
       this.statusCallbacks?.onConnected(Date.now());
       this._startHeartbeat();
@@ -137,10 +144,12 @@ export class WebSocketManager {
     };
 
     socket.onmessage = ({ data }: MessageEvent<string>) => {
+      if (this.socket !== socket) return;
       this.listeners.forEach((l) => l(data));
     };
 
     socket.onclose = ({ code }) => {
+      if (this.socket !== socket) return;
       this._stopHeartbeat();
       if (this.intentionalDisconnect) return;
 
@@ -149,6 +158,7 @@ export class WebSocketManager {
     };
 
     socket.onerror = () => {
+      if (this.socket !== socket) return;
       // onerror always precedes onclose — let onclose handle reconnect
       this.statusCallbacks?.onError('WebSocket error');
     };
@@ -171,10 +181,15 @@ export class WebSocketManager {
 
   private _startHeartbeat(): void {
     this.heartbeatTimer = setInterval(() => {
-      if (this.socket?.readyState === WebSocket.OPEN) {
-        this.socket.send(JSON.stringify({ type: 'heartbeat' }));
-      }
+      this._sendHeartbeatPing();
     }, HEARTBEAT_INTERVAL_MS);
+  }
+
+  /** Send a raw heartbeat ping — bypasses the typed send() intentionally. */
+  private _sendHeartbeatPing(): void {
+    if (this.socket?.readyState === WebSocket.OPEN) {
+      this.socket.send(HEARTBEAT_PING);
+    }
   }
 
   private _stopHeartbeat(): void {

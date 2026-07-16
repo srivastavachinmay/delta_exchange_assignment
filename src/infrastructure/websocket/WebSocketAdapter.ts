@@ -1,4 +1,5 @@
 import type { Channel, TradingSymbol } from '@/shared/types';
+import type { RawTickerMessage, RawOrderBookMessage, RawTradesMessage } from '@/shared/types';
 import type {
   MarketDataPort,
   TickerHandler,
@@ -29,18 +30,15 @@ export class WebSocketAdapter implements MarketDataPort {
     this.manager.registerReadyListener(() => this.subscriptionManager.replayAll());
 
     this.router.registerHandler('ticker', (msg) => {
-      if (msg.channel !== 'ticker') return;
-      this.tickerHandlers.forEach((h) => h(msg as Parameters<TickerHandler>[0]));
+      this.tickerHandlers.forEach((h) => h(msg as RawTickerMessage));
     });
 
     this.router.registerHandler('orderbook', (msg) => {
-      if (msg.channel !== 'orderbook') return;
-      this.orderBookHandlers.forEach((h) => h(msg as Parameters<OrderBookHandler>[0]));
+      this.orderBookHandlers.forEach((h) => h(msg as RawOrderBookMessage));
     });
 
     this.router.registerHandler('trades', (msg) => {
-      if (msg.channel !== 'trades') return;
-      this.tradesHandlers.forEach((h) => h(msg as Parameters<TradesHandler>[0]));
+      this.tradesHandlers.forEach((h) => h(msg as RawTradesMessage));
     });
   }
 
