@@ -201,7 +201,7 @@ The Domain Layer must remain framework-independent and fully testable.
 
 Infrastructure implements external systems.
 
-**Contains:** `WebSocketAdapter`, `WebSocketManager`, `LocalStorageAdapter`
+**Contains:** `WebSocketAdapter`, `WebSocketManager`, `SubscriptionManager`, `LocalStorageAdapter`
 
 **May import:** domain ports, `shared`
 
@@ -368,7 +368,7 @@ src/
 │   └── SubscriptionHandler.ts
 │
 ├── infrastructure/       # External system adapters
-│   ├── websocket/        # WebSocketAdapter + WebSocketManager
+│   ├── websocket/        # WebSocketAdapter, WebSocketManager, SubscriptionManager
 │   ├── storage/          # LocalStorageAdapter
 │   └── config/           # Runtime environment configuration
 │
@@ -406,7 +406,7 @@ src/
 |-------|---------------|------------|---------------------|---------|
 | **Domain** | Business logic, invariants, entity state machines | `shared/types` only | React, Zustand, WebSocket, fetch, localStorage | `OrderBookEngine`, `Price`, `Spread.calculate()` |
 | **Application** | Use case orchestration, message routing, backpressure scheduling | Domain ports, `shared/types` | React, Zustand, concrete adapters | `SubscribeMarketUseCase`, `MessageRouter`, `RAFScheduler` |
-| **Infrastructure** | Adapter implementations for external systems | Application ports, `shared/types` | Domain entities (only raw types), React | `WebSocketAdapter`, `LocalStorageAdapter` |
+| **Infrastructure** | Adapter implementations for external systems | Application ports, `shared/types` | Domain entities (only raw types), React | `WebSocketAdapter`, `WebSocketManager`, `SubscriptionManager`, `LocalStorageAdapter` |
 | **Stores (`app/stores`)** | Reactive state container; bridge between pipeline and React | Domain entities, `shared/types` | WebSocket, domain engines directly | `tickerStore`, `orderBookStore` |
 | **Features (React)** | UI rendering and user interaction | Stores (via selectors), `shared/types` | Application internals, infrastructure, domain engines | `OrderBookPanel`, `TickerStrip` |
 
@@ -439,7 +439,18 @@ Defines the contract for persisting user preferences (selected symbol, grouping 
 
 ### `WebSocketAdapter` — Infrastructure Adapter *(Implemented)*
 
-Implements `MarketDataPort`. Registers as a raw listener on `WebSocketManager`, pipes all messages through `MessageRouter`, and fan-outs typed messages to registered domain handlers. Components and use cases never import this class directly — they hold a `MarketDataPort` reference.
+Implements `MarketDataPort`. Constructed with three collaborators — `MessageRouterPort`, `WebSocketManager`, and `SubscriptionManager` — and wired by the composition root via `initialize()`. The constructor is side-effect-free; `initialize()` registers the raw message listener on `WebSocketManager`, the reconnect replay hook on `WebSocketManager` (delegating to `SubscriptionManager.replayAll()`), and the per-channel handlers on `MessageRouter`. `subscribe()` and `unsubscribe()` delegate entirely to `SubscriptionManager`. Components and use cases never import this class directly — they hold a `MarketDataPort` reference.
+
+### `SubscriptionManager` — Infrastructure Service *(Implemented)*
+
+Owns the desired subscription set — the channels and symbols the application has requested but which may or may not yet be acknowledged by the exchange. Responsibilities:
+
+- Maintain the `desired` Map keyed by `${symbol}:${channel}`
+- Deduplicate subscribe calls (no duplicate sends)
+- Build and send `subscribe` / `unsubscribe` payloads via `WebSocketManager.send()`
+- Implement `replayAll()` — send all desired subscriptions in one batched message after reconnect
+
+`SubscriptionManager` is the single source of truth for subscription *intent*. `subscriptionStore` is the source of truth for server-*acknowledged* subscriptions. They are deliberately separate: a symbol can be desired before the socket opens and acknowledged only after the exchange confirms.
 
 ### `LocalStorageAdapter` — Infrastructure Adapter *(Implemented)*
 
@@ -488,8 +499,9 @@ sequenceDiagram
 
 **Why each step exists:**
 
-- **WebSocketManager** owns reconnection logic, ping/pong keepalive, and connection state. It emits raw strings — no parsing — so it has no opinion about message format.
-- **WebSocketAdapter** is the translation boundary. It bridges the raw transport to the typed `MarketDataPort` interface.
+- **WebSocketManager** owns reconnection logic, ping/pong keepalive, and connection state. It emits raw strings — no parsing — so it has no opinion about message format. On socket open it fires registered ready listeners, allowing `SubscriptionManager` to replay desired subscriptions without any direct coupling.
+- **SubscriptionManager** owns the desired subscription set. It registers a ready listener on `WebSocketManager` so every reconnect automatically replays all desired `(symbol, channel)` pairs in one batched message.
+- **WebSocketAdapter** is the translation boundary. It bridges the raw transport to the typed `MarketDataPort` interface. `subscribe()`/`unsubscribe()` calls are forwarded to `SubscriptionManager`; incoming frames are forwarded to `MessageRouter`.
 - **MessageRouter** enforces channel separation. A malformed or unknown-channel message is dropped at this boundary, not leaked into domain code.
 - **SubscriptionHandler** acknowledges subscription confirmations and updates `subscriptionStore`. This allows the UI to reflect accurate subscription state (e.g., "waiting for order book").
 
@@ -798,8 +810,6 @@ Render individual panels with pre-seeded stores. Assert DOM output reflects stor
 > Populated during development. Items added here are known compromises, not bugs.
 
 - [ ] ESLint import restriction rules (enforce layer boundaries at lint time) not yet configured.
-- [ ] `WebSocketAdapter` registers channel handlers inline in the constructor — these should be injected or registered via a separate bootstrap step for testability.
-- [ ] `wsManager` is a singleton import in `WebSocketAdapter`. Should be injected for testability.
 
 ---
 
@@ -810,7 +820,7 @@ Render individual panels with pre-seeded stores. Assert DOM output reflects stor
 | **High-frequency WS traffic saturating main thread** | High (BTC perpetual at peak volatility) | Jank, dropped frames, CPU throttle | RAF batching + MessageQueue backpressure (Phase 5) |
 | **Memory growth from unbounded trade lists** | Medium | Tab OOM crash over long sessions | Rolling window cap in `tradeStore` (Phase 4) |
 | **Order book sequence gaps causing stale state** | Medium | Incorrect bids/asks displayed | Sequence validation in `OrderBookEngine` + snapshot re-request (Phase 3/9) |
-| **Subscription desync on reconnect** | Medium | Missing data feeds post-reconnect | `SubscriptionHandler` resubscribe-on-reconnect logic (Phase 9) |
+| **Subscription desync on reconnect** | Medium | Missing data feeds post-reconnect | `SubscriptionManager.replayAll()` fires on every socket open via a ready listener on `WebSocketManager` — desired subscriptions are replayed automatically. Server ack tracking remains in `subscriptionStore` via `SubscriptionHandler`. |
 | **Render storms on symbol switch** | Low-Medium | Momentary UI freeze during navigation | Store reset before subscribe + transition state (Phase 7) |
 | **WebSocket message format changes by exchange** | Low | Parse failures, silent data drop | Typed parse guards in `MessageRouter`; exchange changelog monitoring |
 
