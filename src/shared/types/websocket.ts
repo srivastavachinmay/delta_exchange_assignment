@@ -35,7 +35,7 @@ export type Channel =
 
 /** One entry in the channels array of a subscribe/unsubscribe payload. */
 export interface ChannelEntry {
-  readonly name: Channel;
+  readonly name: string;
   readonly symbols: readonly TradingSymbol[];
 }
 

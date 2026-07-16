@@ -1,88 +1,107 @@
-import type { Channel, TradingSymbol } from '@/shared/types';
-import { makeSubscriptionKey, type SubscriptionKey } from '@/shared/types';
+import type { Channel, TradingSymbol, OutboundMessage } from '@/shared/types';
 import type { WebSocketManager } from './WebSocketManager';
 
-type SubscriptionEntry = { readonly symbol: TradingSymbol; readonly channel: Channel };
+// Internal Channel names differ from wire protocol names — this map owns the translation.
+const PROTOCOL_CHANNEL: Readonly<Partial<Record<Channel, string>>> = {
+  ticker: 'v2/ticker',
+  orderbook: 'v2/orderbook',
+  trades: 'v2/trades',
+};
 
 export class SubscriptionManager {
-  /**
-   * Desired subscriptions — what the application has requested.
-   * Keyed by SubscriptionKey (`${symbol}:${channel}`).
-   *
-   * Acknowledged subscriptions (server confirmation) are tracked separately
-   * in subscriptionStore via SubscriptionHandler. Intentionally decoupled:
-   * a subscription can be desired before the socket opens and acknowledged
-   * only after the exchange confirms.
-   */
-  private readonly desired = new Map<SubscriptionKey, SubscriptionEntry>();
+  private readonly desired = new Map<Channel, Set<TradingSymbol>>();
 
   constructor(private readonly manager: WebSocketManager) {}
 
   subscribe(channel: Channel, symbols: TradingSymbol | TradingSymbol[]): void {
     const arr = Array.isArray(symbols) ? symbols : [symbols];
+
+    const bucket = this._getOrCreateBucket(channel);
     const fresh: TradingSymbol[] = [];
 
     for (const symbol of arr) {
-      const key = makeSubscriptionKey(symbol, channel);
-      if (!this.desired.has(key)) {
-        this.desired.set(key, { symbol, channel });
+      if (!bucket.has(symbol)) {
+        bucket.add(symbol);
         fresh.push(symbol);
       }
     }
 
     if (fresh.length === 0) return;
-
-    this.manager.send({
-      type: 'subscribe',
-      payload: { channels: [{ name: channel, symbols: fresh }] },
-    });
+    this.manager.send(this._buildSubscribePayload(channel, fresh));
   }
 
   unsubscribe(channel: Channel, symbols: TradingSymbol | TradingSymbol[]): void {
     const arr = Array.isArray(symbols) ? symbols : [symbols];
-    const removed: TradingSymbol[] = [];
+    const bucket = this.desired.get(channel);
+    if (!bucket) return;
 
+    const removed: TradingSymbol[] = [];
     for (const symbol of arr) {
-      const key = makeSubscriptionKey(symbol, channel);
-      if (this.desired.has(key)) {
-        this.desired.delete(key);
+      if (bucket.has(symbol)) {
+        bucket.delete(symbol);
         removed.push(symbol);
       }
     }
 
-    if (removed.length === 0) return;
+    if (bucket.size === 0) {
+      this.desired.delete(channel);
+    }
 
-    this.manager.send({
-      type: 'unsubscribe',
-      payload: { channels: [{ name: channel, symbols: removed }] },
-    });
+    if (removed.length === 0) return;
+    this.manager.send(this._buildUnsubscribePayload(channel, removed));
   }
 
-  /**
-   * Re-send all desired subscriptions after a reconnect.
-   * Groups symbols by channel so one message covers all symbols per channel.
-   */
   replayAll(): void {
     if (this.desired.size === 0) return;
 
-    const byChannel = new Map<Channel, TradingSymbol[]>();
-    this.desired.forEach(({ symbol, channel }) => {
-      const existing = byChannel.get(channel);
-      if (existing) {
-        existing.push(symbol);
-      } else {
-        byChannel.set(channel, [symbol]);
-      }
-    });
+    const channels = this._buildChannelList();
+    if (channels.length === 0) return;
 
     this.manager.send({
       type: 'subscribe',
-      payload: {
-        channels: Array.from(byChannel.entries()).map(([name, symbols]) => ({
-          name,
-          symbols,
-        })),
-      },
+      payload: { channels },
     });
+  }
+
+  /** No-op until Phase N: reconcile desired vs server-confirmed state on ack. */
+  handleAcknowledgement(
+    _channels: readonly Channel[],
+    _symbols: readonly TradingSymbol[],
+  ): void {}
+
+  private _getOrCreateBucket(channel: Channel): Set<TradingSymbol> {
+    let bucket = this.desired.get(channel);
+    if (!bucket) {
+      bucket = new Set<TradingSymbol>();
+      this.desired.set(channel, bucket);
+    }
+    return bucket;
+  }
+
+  private _buildSubscribePayload(channel: Channel, symbols: TradingSymbol[]): OutboundMessage {
+    return {
+      type: 'subscribe',
+      payload: { channels: [{ name: this._protocolName(channel), symbols }] },
+    };
+  }
+
+  private _buildUnsubscribePayload(channel: Channel, symbols: TradingSymbol[]): OutboundMessage {
+    return {
+      type: 'unsubscribe',
+      payload: { channels: [{ name: this._protocolName(channel), symbols }] },
+    };
+  }
+
+  private _buildChannelList(): Array<{ name: string; symbols: TradingSymbol[] }> {
+    const result: Array<{ name: string; symbols: TradingSymbol[] }> = [];
+    for (const [channel, symbolSet] of this.desired) {
+      if (symbolSet.size === 0) continue;
+      result.push({ name: this._protocolName(channel), symbols: Array.from(symbolSet) });
+    }
+    return result;
+  }
+
+  private _protocolName(channel: Channel): string {
+    return PROTOCOL_CHANNEL[channel] ?? channel;
   }
 }
