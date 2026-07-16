@@ -14,7 +14,7 @@ export type {
   RawTradesMessage,
 } from './websocket';
 
-export type { ConnectionStatus, ConnectionState } from './connection';
+export type { ConnectionStatus, ConnectionState, ConnectionStatusCallbacks } from './connection';
 
 export type { SymbolConfig, Subscription, SubscriptionKey } from './market';
 export { makeSubscriptionKey } from './market';

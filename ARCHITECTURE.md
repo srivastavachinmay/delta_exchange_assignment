@@ -109,6 +109,194 @@ React does not drive the application. It does not own the WebSocket lifecycle, s
 
 ---
 
+## Layer Dependency Rules
+
+This section defines the project's import boundaries and architectural constraints. It is the **single source of truth** that all future implementation phases must follow.
+
+> **Note for Claude Code:** All future Claude Code implementation phases must read and comply with these Layer Dependency Rules before generating any code.
+
+---
+
+### Dependency Direction
+
+The project enforces a strict, one-way dependency direction:
+
+```
+Presentation (React)
+       ↓
+  Application
+       ↓
+    Domain
+```
+
+- **Infrastructure** implements Domain Ports and depends on Domain interfaces.
+- **Domain** must never depend on Infrastructure.
+- **React** must never contain business logic.
+
+---
+
+### Composition Root
+
+Only the Composition Root (`App` / Providers / Bootstrap) is allowed to wire together:
+
+- Infrastructure
+- Application
+- Domain
+
+No other layer should manually instantiate infrastructure services. Use dependency inversion.
+
+---
+
+### App Layer
+
+**May import:** `application`, `features`, `shared`
+
+**Must not directly import:** domain services, infrastructure adapters
+
+**Responsibility:** application bootstrap and dependency composition.
+
+---
+
+### Features
+
+Each feature owns its UI (Ticker, OrderBook, Trades).
+
+**May import:** `application`, `shared`, domain models
+
+**Must NOT import:** infrastructure, other feature internals
+
+Communication between features must go through the Application Layer.
+
+---
+
+### Application Layer
+
+Application coordinates workflows.
+
+**May import:** `domain`, `shared`
+
+**Must NOT import:** React, feature components, browser APIs
+
+**Contains:** use cases, message routing, orchestration, scheduling, store coordination
+
+Application must not contain business calculations.
+
+---
+
+### Domain Layer
+
+The Domain Layer contains all business logic.
+
+**May contain:** Entities, Value Objects, Domain Services, Calculators, Ports, pure utilities
+
+**May import:** `shared` types
+
+**Must NEVER import:** React, Zustand, WebSocket, LocalStorage, browser APIs, infrastructure, feature components
+
+The Domain Layer must remain framework-independent and fully testable.
+
+---
+
+### Infrastructure Layer
+
+Infrastructure implements external systems.
+
+**Contains:** `WebSocketAdapter`, `WebSocketManager`, `LocalStorageAdapter`
+
+**May import:** domain ports, `shared`
+
+**Must NOT import:** React components, feature UI
+
+Infrastructure implements interfaces defined by the Domain Layer.
+
+---
+
+### Shared
+
+**Contains:** Types, Constants, Utilities, Framework helpers, Generic hooks
+
+Shared must remain dependency-light. Shared must not depend on feature modules.
+
+---
+
+### State Management
+
+Stores are responsible only for state.
+
+**Stores must NEVER contain:** business rules, grouping, aggregation, calculations, parsing, WebSocket communication
+
+Stores receive processed domain objects.
+
+---
+
+### React Components
+
+Components are responsible only for presentation.
+
+**Components may:** render UI, dispatch actions, read state
+
+**Components must NEVER:** aggregate data, parse WebSocket messages, calculate spreads, group order book levels, compute statistics, contain business rules
+
+---
+
+### WebSocket Access
+
+Only the communication layer may create or access browser WebSocket objects.
+
+**Allowed classes:** `WebSocketManager`, `SubscriptionManager`, `MessageRouter`
+
+No other file should instantiate `new WebSocket()`.
+
+---
+
+### Business Logic
+
+Business logic belongs exclusively inside domain engines and calculators:
+
+`TickerEngine`, `OrderBookEngine`, `TradeEngine`, `GroupingEngine`, `DepthCalculator`, `SpreadCalculator`, `TradeAggregator`, `RollingStatistics`
+
+Business logic must never exist inside React Components, Stores, or Adapters.
+
+---
+
+### State Flow
+
+The canonical data flow is strictly top-down:
+
+```
+WebSocket
+    ↓
+Infrastructure
+    ↓
+Application
+    ↓
+Domain
+    ↓
+Stores
+    ↓
+React
+```
+
+No layer may bypass another layer.
+
+---
+
+### Architectural Enforcement
+
+#### Development Rules
+
+- Every future implementation must respect these dependency rules.
+- New features should integrate into the existing architecture rather than introducing new patterns.
+- Avoid circular dependencies.
+- Prefer composition over inheritance.
+- Keep files focused on a single responsibility.
+- Do not bypass the Application Layer.
+- React is the presentation layer, not the architecture.
+
+> **All future Claude Code implementation phases must read and comply with these Layer Dependency Rules before generating code.**
+
+---
+
 ## 5. High-Level Architecture
 
 ```mermaid

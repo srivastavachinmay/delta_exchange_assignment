@@ -18,10 +18,11 @@
 
 import type { InboundMessage, Channel } from '@/shared/types';
 import type { SubscriptionHandler } from './SubscriptionHandler';
+import type { MessageRouterPort, ChannelHandler } from '@/domain/ports/MessageRouterPort';
 
-export type ChannelMessageHandler = (message: InboundMessage) => void;
+export type ChannelMessageHandler = ChannelHandler;
 
-export class MessageRouter {
+export class MessageRouter implements MessageRouterPort {
   private readonly handlers = new Map<Channel, ChannelMessageHandler>();
 
   constructor(private readonly subscriptionHandler: SubscriptionHandler) {

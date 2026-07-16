@@ -10,7 +10,7 @@
  */
 
 import { WebSocketProvider } from './providers/WebSocketProvider';
-import { AppShell } from '@/features/layout/AppShell';
+import { AppShell } from './AppShell';
 
 export function App() {
   return (

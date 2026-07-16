@@ -22,3 +22,11 @@ export interface ConnectionState {
   /** Unix ms of last successful connection. Null if never connected. */
   readonly connectedAt: number | null;
 }
+
+/** Callbacks registered by the composition root to bridge WebSocketManager → connectionStore. */
+export interface ConnectionStatusCallbacks {
+  onStatus(status: ConnectionStatus): void;
+  onConnected(connectedAt: number): void;
+  onReconnecting(attempt: number): void;
+  onError(message: string): void;
+}

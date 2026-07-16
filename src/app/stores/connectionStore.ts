@@ -21,6 +21,7 @@ import type { ConnectionState, ConnectionStatus } from '@/shared/types';
 
 interface ConnectionActions {
   setStatus(status: ConnectionStatus): void;
+  setConnected(connectedAt: number): void;
   setReconnecting(attempt: number): void;
   setError(message: string): void;
   reset(): void;
@@ -48,12 +49,25 @@ export const useConnectionStore = create<ConnectionStore>()(
             status,
             connected: status === 'connected',
             reconnecting: status === 'reconnecting',
-            reconnectAttempt: status === 'connected' ? 0 : prev.reconnectAttempt,
             error: status !== 'error' ? null : prev.error,
-            connectedAt: status === 'connected' ? Date.now() : prev.connectedAt,
           }),
           false,
           'connection/setStatus',
+        );
+      },
+
+      setConnected(connectedAt: number) {
+        set(
+          {
+            status: 'connected',
+            connected: true,
+            reconnecting: false,
+            reconnectAttempt: 0,
+            error: null,
+            connectedAt,
+          },
+          false,
+          'connection/setConnected',
         );
       },
 

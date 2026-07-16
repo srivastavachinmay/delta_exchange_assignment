@@ -1,35 +1,10 @@
-/**
- * WebSocketManager — singleton managing the exchange WebSocket connection.
- *
- * This is pure infrastructure: no React, no domain logic, no Zustand.
- * It manages the TCP-level WebSocket lifecycle only.
- *
- * Responsibilities:
- * - Single connection (idempotent connect())
- * - Exponential backoff reconnect: 1s → 2s → 4s → 8s → 16s → 30s (cap)
- * - Heartbeat to keep the connection alive (exchanges close idle connections)
- * - Subscription replay on reconnect (server forgets subscriptions on disconnect)
- * - Raw message listener registration (consumed by WebSocketAdapter)
- *
- * What this class does NOT do:
- * - Parse or understand messages (that's MessageRouter)
- * - Write to any store (that's SubscriptionHandler / channel handlers)
- * - Import React (intentional — survives React tree unmounts)
- *
- * Usage:
- *   const mgr = WebSocketManager.getInstance()
- *   mgr.connect()
- *   mgr.subscribe('BTCUSD', 'ticker')
- */
-
-import type { Channel, TradingSymbol, OutboundMessage } from '@/shared/types';
+import type { Channel, TradingSymbol, OutboundMessage, ConnectionStatusCallbacks } from '@/shared/types';
 import {
-  WS_URL,
   computeBackoffDelay,
   RECONNECT_MAX_ATTEMPTS,
   HEARTBEAT_INTERVAL_MS,
 } from '@/shared/constants/websocket';
-import { useConnectionStore } from '@/app/stores/connectionStore';
+import { INFRASTRUCTURE_CONFIG } from '@/infrastructure/config/SymbolConfig';
 
 type RawMessageListener = (raw: string) => void;
 
@@ -74,16 +49,31 @@ export class WebSocketManager {
   /** True when disconnect() was called intentionally — suppresses reconnect. */
   private intentionalDisconnect = false;
 
+  /**
+   * Status callbacks registered by the composition root.
+   * Bridges WebSocketManager lifecycle events → connectionStore writes,
+   * without Infrastructure depending on app/stores directly.
+   */
+  private statusCallbacks: ConnectionStatusCallbacks | null = null;
+
   // -------------------------------------------------------------------------
   // Public API
   // -------------------------------------------------------------------------
+
+  /**
+   * Register status callbacks. Call this before connect().
+   * The composition root (WebSocketProvider) wires these to connectionStore actions.
+   */
+  setStatusCallbacks(callbacks: ConnectionStatusCallbacks): void {
+    this.statusCallbacks = callbacks;
+  }
 
   connect(): void {
     if (this.socket?.readyState === WebSocket.OPEN) return;
     if (this.socket?.readyState === WebSocket.CONNECTING) return;
 
     this.intentionalDisconnect = false;
-    useConnectionStore.getState().setStatus('connecting');
+    this.statusCallbacks?.onStatus('connecting');
     this._openSocket();
   }
 
@@ -93,7 +83,7 @@ export class WebSocketManager {
     this.socket?.close(1000, 'client disconnect');
     this.socket = null;
     this.reconnectAttempt = 0;
-    useConnectionStore.getState().setStatus('disconnected');
+    this.statusCallbacks?.onStatus('disconnected');
   }
 
   subscribe(symbol: TradingSymbol, channel: Channel): void {
@@ -101,7 +91,7 @@ export class WebSocketManager {
     if (this.subscriptions.has(key)) return;
 
     this.subscriptions.set(key, { symbol, channel });
-    this._send({ type: 'subscribe', payload: { channels: [channel], symbols: [symbol] } });
+    this.send({ type: 'subscribe', payload: { channels: [channel], symbols: [symbol] } });
   }
 
   unsubscribe(symbol: TradingSymbol, channel: Channel): void {
@@ -109,15 +99,32 @@ export class WebSocketManager {
     if (!this.subscriptions.has(key)) return;
 
     this.subscriptions.delete(key);
-    this._send({ type: 'unsubscribe', payload: { channels: [channel], symbols: [symbol] } });
+    this.send({ type: 'unsubscribe', payload: { channels: [channel], symbols: [symbol] } });
   }
 
-  addListener(listener: RawMessageListener): void {
+  registerListener(listener: RawMessageListener): void {
     this.listeners.add(listener);
   }
 
   removeListener(listener: RawMessageListener): void {
     this.listeners.delete(listener);
+  }
+
+  send(message: OutboundMessage): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.socket.send(JSON.stringify(message));
+  }
+
+  destroy(): void {
+    this.intentionalDisconnect = true;
+    this._clearTimers();
+    this.socket?.close(1000, 'client destroy');
+    this.socket = null;
+    this.reconnectAttempt = 0;
+    this.listeners.clear();
+    this.subscriptions.clear();
+    this.statusCallbacks?.onStatus('disconnected');
+    WebSocketManager.instance = null;
   }
 
   get isConnected(): boolean {
@@ -129,12 +136,12 @@ export class WebSocketManager {
   // -------------------------------------------------------------------------
 
   private _openSocket(): void {
-    const socket = new WebSocket(WS_URL);
+    const socket = new WebSocket(INFRASTRUCTURE_CONFIG.wsUrl);
     this.socket = socket;
 
     socket.onopen = () => {
       this.reconnectAttempt = 0;
-      useConnectionStore.getState().setStatus('connected');
+      this.statusCallbacks?.onConnected(Date.now());
       this._startHeartbeat();
       this._replaySubscriptions();
     };
@@ -153,23 +160,18 @@ export class WebSocketManager {
 
     socket.onerror = () => {
       // onerror always precedes onclose — let onclose handle reconnect
-      useConnectionStore.getState().setError('WebSocket error');
+      this.statusCallbacks?.onError('WebSocket error');
     };
-  }
-
-  private _send(message: OutboundMessage): void {
-    if (this.socket?.readyState !== WebSocket.OPEN) return;
-    this.socket.send(JSON.stringify(message));
   }
 
   private _scheduleReconnect(): void {
     if (this.reconnectAttempt >= RECONNECT_MAX_ATTEMPTS) {
-      useConnectionStore.getState().setError('Max reconnect attempts reached');
+      this.statusCallbacks?.onError('Max reconnect attempts reached');
       return;
     }
 
     const delay = computeBackoffDelay(this.reconnectAttempt);
-    useConnectionStore.getState().setReconnecting(this.reconnectAttempt + 1);
+    this.statusCallbacks?.onReconnecting(this.reconnectAttempt + 1);
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectAttempt++;
@@ -188,7 +190,7 @@ export class WebSocketManager {
       channels.add(channel);
     });
 
-    this._send({
+    this.send({
       type: 'subscribe',
       payload: { channels: [...channels], symbols: [...symbols] },
     });
@@ -196,7 +198,6 @@ export class WebSocketManager {
 
   private _startHeartbeat(): void {
     this.heartbeatTimer = setInterval(() => {
-      // Delta Exchange heartbeat format — replace with exchange-specific ping if required
       if (this.socket?.readyState === WebSocket.OPEN) {
         this.socket.send(JSON.stringify({ type: 'heartbeat' }));
       }

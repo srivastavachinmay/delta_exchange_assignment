@@ -2,7 +2,7 @@
  * OrderBookPlaceholder — replaced in Phase 3.
  * Phase 3: live order book with depth visualization, grouping, and spread display.
  */
-import styles from '../ticker/ticker.module.css';
+import styles from '@/shared/styles/placeholder.module.css';
 
 export function OrderBookPlaceholder() {
   return (

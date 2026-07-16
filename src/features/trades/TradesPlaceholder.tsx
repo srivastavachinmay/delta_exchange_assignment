@@ -2,7 +2,7 @@
  * TradesPlaceholder — replaced in Phase 4.
  * Phase 4: real-time trade tape with side coloring and virtual scroll.
  */
-import styles from '../ticker/ticker.module.css';
+import styles from '@/shared/styles/placeholder.module.css';
 
 export function TradesPlaceholder() {
   return (

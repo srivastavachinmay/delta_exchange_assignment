@@ -3,9 +3,9 @@
  *
  * Backoff: 1s → 2s → 4s → 8s → 16s → 30s (cap).
  * 30s cap matches session timeout behavior on most exchanges.
+ *
+ * Note: WS_URL is deployment config — see infrastructure/config/SymbolConfig.ts.
  */
-
-export const WS_URL = 'wss://socket.delta.exchange';
 
 export const RECONNECT_BASE_MS = 1_000;
 export const RECONNECT_MAX_MS = 30_000;

@@ -5,11 +5,12 @@ import { TradesPlaceholder } from '@/features/trades/TradesPlaceholder';
 import styles from './AppShell.module.css';
 
 /**
- * AppShell — grid layout shell. Presentational only.
+ * AppShell — grid layout and composition root for all feature panels.
  *
- * Each grid area holds a feature panel. Features are independent —
- * they import from their own stores only, never from each other.
- * This enforces the render isolation contract at the module level.
+ * Lives in app/ because its role is composition: wiring feature panels into
+ * the layout grid. Features are independent — they import only from their own
+ * stores, never from each other. Cross-panel coordination goes through the
+ * Application Layer, not through this component.
  *
  * Phase 2/3/4: replace Placeholder components with real implementations.
  */
