@@ -1,29 +1,23 @@
 import { memo } from 'react';
 import { useConnectionStore } from '@/app/stores/connectionStore';
+import { useSubscriptionStore } from '@/app/stores/subscriptionStore';
 import styles from './ConnectionStatusBar.module.css';
 
 const STATUS_LABELS: Record<string, string> = {
-  idle: 'Idle',
+  idle: 'Disconnected',
   connecting: 'Connecting',
-  connected: 'Live',
+  connected: 'Connected',
   reconnecting: 'Reconnecting',
   disconnected: 'Disconnected',
   error: 'Error',
 };
 
-/**
- * ConnectionStatusBar — live connection state indicator.
- *
- * memo'd: only re-renders when the connection store slice changes.
- * Uses granular Zustand selectors — a ticker update CANNOT cause this to re-render.
- *
- * Reading from connectionStore (not from WebSocketManager) ensures the UI
- * reflects server-confirmed state, not optimistic client state.
- */
 export const ConnectionStatusBar = memo(function ConnectionStatusBar() {
   const status = useConnectionStore((s) => s.status);
   const reconnectAttempt = useConnectionStore((s) => s.reconnectAttempt);
   const error = useConnectionStore((s) => s.error);
+  const activeCount = useSubscriptionStore((s) => s.subscriptions.size);
+  const desiredCount = useSubscriptionStore((s) => s.desired.size);
 
   return (
     <div className={styles.bar} role="status" aria-live="polite">
@@ -41,6 +35,12 @@ export const ConnectionStatusBar = memo(function ConnectionStatusBar() {
 
       {status === 'error' && error && (
         <span className={styles.errorMessage}>{error}</span>
+      )}
+
+      {desiredCount > 0 && (
+        <span className={styles.subscriptionCount}>
+          {activeCount}/{desiredCount} channels
+        </span>
       )}
 
       <div className={styles.spacer} />

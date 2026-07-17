@@ -15,19 +15,21 @@ export class WebSocketAdapter implements MarketDataPort {
   private readonly orderBookHandlers = new Set<OrderBookHandler>();
   private readonly tradesHandlers = new Set<TradesHandler>();
 
+  private readonly boundRoute: (raw: string) => void;
+  private readonly boundReplayAll: () => void;
+
   constructor(
     private readonly router: MessageRouterPort,
     private readonly manager: WebSocketManager,
     private readonly subscriptionManager: SubscriptionManager,
-  ) {}
+  ) {
+    this.boundRoute = (raw: string) => this.router.route(raw);
+    this.boundReplayAll = () => this.subscriptionManager.replayAll();
+  }
 
-  /**
-   * Wire all listeners and handlers. Call once from the composition root
-   * after constructing all collaborators, before connect().
-   */
   initialize(): void {
-    this.manager.registerListener((raw) => this.router.route(raw));
-    this.manager.registerReadyListener(() => this.subscriptionManager.replayAll());
+    this.manager.registerListener(this.boundRoute);
+    this.manager.registerReadyListener(this.boundReplayAll);
 
     this.router.registerHandler('ticker', (msg) => {
       this.tickerHandlers.forEach((h) => h(msg as RawTickerMessage));
@@ -68,5 +70,10 @@ export class WebSocketAdapter implements MarketDataPort {
 
   disconnect(): void {
     this.manager.disconnect();
+  }
+
+  cleanup(): void {
+    this.manager.removeListener(this.boundRoute);
+    this.manager.removeReadyListener(this.boundReplayAll);
   }
 }

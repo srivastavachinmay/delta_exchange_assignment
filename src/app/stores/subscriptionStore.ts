@@ -19,11 +19,14 @@ import { makeSubscriptionKey } from '@/shared/types';
 
 interface SubscriptionState {
   readonly subscriptions: ReadonlyMap<SubscriptionKey, Subscription>;
+  readonly desired: ReadonlySet<SubscriptionKey>;
 }
 
 interface SubscriptionActions {
   acknowledge(symbols: TradingSymbol[], channels: Channel[]): void;
   remove(symbols: TradingSymbol[], channels: Channel[]): void;
+  addDesired(symbols: TradingSymbol[], channels: Channel[]): void;
+  removeDesired(symbols: TradingSymbol[], channels: Channel[]): void;
   isSubscribed(symbol: TradingSymbol, channel: Channel): boolean;
   reset(): void;
 }
@@ -34,6 +37,7 @@ export const useSubscriptionStore = create<SubscriptionStore>()(
   devtools(
     subscribeWithSelector((set, get) => ({
       subscriptions: new Map<SubscriptionKey, Subscription>(),
+      desired: new Set<SubscriptionKey>(),
 
       acknowledge(symbols, channels) {
         const now = Date.now();
@@ -64,12 +68,36 @@ export const useSubscriptionStore = create<SubscriptionStore>()(
         set({ subscriptions: next }, false, 'subscription/remove');
       },
 
+      addDesired(symbols, channels) {
+        const next = new Set(get().desired);
+
+        for (const symbol of symbols) {
+          for (const channel of channels) {
+            next.add(makeSubscriptionKey(symbol, channel));
+          }
+        }
+
+        set({ desired: next }, false, 'subscription/addDesired');
+      },
+
+      removeDesired(symbols, channels) {
+        const next = new Set(get().desired);
+
+        for (const symbol of symbols) {
+          for (const channel of channels) {
+            next.delete(makeSubscriptionKey(symbol, channel));
+          }
+        }
+
+        set({ desired: next }, false, 'subscription/removeDesired');
+      },
+
       isSubscribed(symbol, channel) {
         return get().subscriptions.has(makeSubscriptionKey(symbol, channel));
       },
 
       reset() {
-        set({ subscriptions: new Map() }, false, 'subscription/reset');
+        set({ subscriptions: new Map(), desired: new Set() }, false, 'subscription/reset');
       },
     })),
     { name: 'subscriptionStore' },

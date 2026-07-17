@@ -61,6 +61,13 @@
   color: #f87171;
 }
 
+.subscriptionCount {
+  color: var(--color-text-muted);
+  border-left: 1px solid var(--color-border);
+  padding-left: 8px;
+  margin-left: 4px;
+}
+
 .spacer {
   flex: 1;
 }

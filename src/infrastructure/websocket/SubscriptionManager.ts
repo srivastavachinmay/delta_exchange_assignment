@@ -8,10 +8,20 @@ const PROTOCOL_CHANNEL: Readonly<Partial<Record<Channel, string>>> = {
   trades: 'v2/trades',
 };
 
+export interface SubscriptionManagerCallbacks {
+  onDesiredAdded(symbols: TradingSymbol[], channel: Channel): void;
+  onDesiredRemoved(symbols: TradingSymbol[], channel: Channel): void;
+}
+
 export class SubscriptionManager {
   private readonly desired = new Map<Channel, Set<TradingSymbol>>();
+  private callbacks: SubscriptionManagerCallbacks | null = null;
 
   constructor(private readonly manager: WebSocketManager) {}
+
+  setCallbacks(callbacks: SubscriptionManagerCallbacks): void {
+    this.callbacks = callbacks;
+  }
 
   subscribe(channel: Channel, symbols: TradingSymbol | TradingSymbol[]): void {
     const arr = Array.isArray(symbols) ? symbols : [symbols];
@@ -28,6 +38,7 @@ export class SubscriptionManager {
 
     if (fresh.length === 0) return;
     this.manager.send(this._buildSubscribePayload(channel, fresh));
+    this.callbacks?.onDesiredAdded(fresh, channel);
   }
 
   unsubscribe(channel: Channel, symbols: TradingSymbol | TradingSymbol[]): void {
@@ -49,6 +60,7 @@ export class SubscriptionManager {
 
     if (removed.length === 0) return;
     this.manager.send(this._buildUnsubscribePayload(channel, removed));
+    this.callbacks?.onDesiredRemoved(removed, channel);
   }
 
   replayAll(): void {
