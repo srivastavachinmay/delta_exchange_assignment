@@ -1,6 +1,7 @@
 import type { InboundMessage, Channel } from '@/shared/types';
 import type { SubscriptionHandler } from './SubscriptionHandler';
 import type { MessageRouterPort, ChannelHandler } from '@/domain/ports/MessageRouterPort';
+import type { IMessageQueue } from './scheduler/MessageQueue';
 import { logger } from '@/shared/utils/DevelopmentLogger';
 
 export type ChannelMessageHandler = ChannelHandler;
@@ -17,10 +18,19 @@ const WIRE_TO_CHANNEL: Readonly<Partial<Record<string, Channel>>> = {
 // Frames that pass JSON.parse but lack the InboundMessage shape — suppress shape warnings for these.
 const EXPECTED_NON_EVENT_TYPES = new Set(['heartbeat', 'heartbeat_response']);
 
+// Market data channels that are buffered through the queue rather than dispatched immediately.
+// Control channels (subscription, connection) always dispatch directly so they are never delayed.
+const MARKET_DATA_CHANNELS: ReadonlySet<Channel> = new Set(['ticker', 'orderbook', 'trades']);
+
 export class MessageRouter implements MessageRouterPort {
   private readonly handlers = new Map<Channel, Set<ChannelMessageHandler>>();
+  private readonly marketDataQueue: IMessageQueue<InboundMessage> | null;
 
-  constructor(private readonly subscriptionHandler: SubscriptionHandler) {
+  constructor(
+    private readonly subscriptionHandler: SubscriptionHandler,
+    marketDataQueue?: IMessageQueue<InboundMessage>,
+  ) {
+    this.marketDataQueue = marketDataQueue ?? null;
     this.registerHandler('subscription', (msg) => {
       this.subscriptionHandler.handle(msg);
     });
@@ -52,13 +62,21 @@ export class MessageRouter implements MessageRouterPort {
       return;
     }
 
+    logger.incomingMessage(wireChannel, extractSymbol(message));
+
+    // Market data → queue for frame-aligned batched processing
+    if (this.marketDataQueue && MARKET_DATA_CHANNELS.has(channel)) {
+      this.marketDataQueue.enqueue(message);
+      return;
+    }
+
+    // Control messages (subscription, connection) → immediate dispatch
     const handlers = this.handlers.get(channel);
     if (!handlers || handlers.size === 0) {
       logger.noHandlersForChannel(channel);
       return;
     }
 
-    logger.incomingMessage(wireChannel, extractSymbol(message));
     handlers.forEach((h) => h(message));
   }
 

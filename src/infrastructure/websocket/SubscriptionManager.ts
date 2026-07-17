@@ -122,3 +122,6 @@ export class SubscriptionManager {
     return PROTOCOL_CHANNEL[channel] ?? channel;
   }
 }
+
+import { wsManager } from './WebSocketManager';
+export const subscriptionManager = new SubscriptionManager(wsManager);

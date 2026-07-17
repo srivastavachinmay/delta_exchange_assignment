@@ -1,23 +1,22 @@
 /**
- * BatchProcessor — coalesces multiple messages into a single domain update.
+ * BatchProcessor — groups messages by (symbol, channel) and tags each group
+ * with its batching strategy.
  *
  * Pipeline position: MessageQueue → [BatchProcessor] → RAF → Domain Engine
  *
- * Problem it solves:
- * Even after buffering, a single animation frame may contain 5-10 orderbook
- * deltas for the same symbol. Processing each delta independently is wasteful:
- * 5 engine calls, 5 Zustand writes, 5 React re-renders.
+ * Responsibility:
+ * BatchProcessor is a pure grouper. It collects all messages drained from the
+ * queue in a single frame and organises them so the consumer (the RAF callback)
+ * can apply the correct strategy per channel:
  *
- * Solution:
- * Within a single frame's drain, group messages by (symbol, channel).
- * Apply only the LAST message per group (for ticker, where latest wins),
- * or apply all deltas in sequence (for orderbook, where order matters).
+ *   ticker    — last-wins:         engine may process every message; consumer
+ *                                  writes only the final result to the store.
+ *   orderbook — ordered-sequence:  all deltas must be applied in order.
+ *   trades    — accumulate-all:    every trade is a discrete event; none dropped.
  *
- * Phase 5:
- * - implement process(messages) → batches grouped by symbol+channel
- * - ticker batching strategy: last-wins
- * - orderbook batching strategy: ordered-sequence
- * - trades batching strategy: accumulate-all
+ * BatchProcessor does NOT enforce the strategy itself. It passes all messages
+ * to the consumer and lets the consumer decide how to apply them. This keeps
+ * batching concerns (grouping) separate from domain concerns (how to process).
  */
 
 import type { InboundMessage, Channel, TradingSymbol } from '@/shared/types';
@@ -32,22 +31,66 @@ export interface BatchGroup {
 }
 
 export interface IBatchProcessor {
-  /**
-   * Group a set of drained messages into batches ready for domain processing.
-   * Returns one BatchGroup per (symbol, channel) pair.
-   */
   process(messages: readonly InboundMessage[]): readonly BatchGroup[];
 }
 
-/**
- * BatchProcessor stub.
- * Phase 5: implement per-channel batching strategies.
- */
-export class BatchProcessor implements IBatchProcessor {
-  // TODO Phase 5: configurable strategies per channel
-  // private readonly strategies: Map<Channel, BatchingStrategy>
+const CHANNEL_STRATEGIES: Readonly<Partial<Record<Channel, BatchingStrategy>>> = {
+  ticker: 'last-wins',
+  orderbook: 'ordered-sequence',
+  trades: 'accumulate-all',
+};
 
-  process(_messages: readonly InboundMessage[]): readonly BatchGroup[] {
-    throw new Error('BatchProcessor not implemented — Phase 5');
+export class BatchProcessor implements IBatchProcessor {
+  /**
+   * Group a set of drained messages into batches ready for domain processing.
+   * Returns one BatchGroup per (symbol, channel) pair found in the input.
+   * Messages without a resolvable channel or symbol are silently skipped.
+   */
+  process(messages: readonly InboundMessage[]): readonly BatchGroup[] {
+    if (messages.length === 0) return EMPTY;
+
+    type GroupAccumulator = { symbol: TradingSymbol; channel: Channel; msgs: InboundMessage[] };
+    const groups = new Map<string, GroupAccumulator>();
+
+    for (const msg of messages) {
+      const channel = resolveChannel(msg);
+      if (!channel) continue;
+      const symbol = resolveSymbol(msg);
+      if (!symbol) continue;
+
+      const key = `${symbol}:${channel}`;
+      let group = groups.get(key);
+      if (!group) {
+        group = { symbol, channel, msgs: [] };
+        groups.set(key, group);
+      }
+      group.msgs.push(msg);
+    }
+
+    const batches: BatchGroup[] = [];
+    for (const { symbol, channel, msgs } of groups.values()) {
+      const strategy = CHANNEL_STRATEGIES[channel];
+      if (!strategy) continue;
+
+      batches.push({ symbol, channel, messages: msgs, strategy });
+    }
+
+    return batches;
   }
+}
+
+const EMPTY: readonly BatchGroup[] = [];
+
+/**
+ * Resolve the internal channel from a message.
+ * v2/ticker uses `type` as discriminator; all others carry `channel`.
+ */
+function resolveChannel(msg: InboundMessage): Channel | undefined {
+  if (msg.channel) return msg.channel;
+  if (msg.type === 'v2/ticker') return 'ticker';
+  return undefined;
+}
+
+function resolveSymbol(msg: InboundMessage): TradingSymbol | undefined {
+  return 'symbol' in msg ? (msg as { symbol?: TradingSymbol }).symbol : undefined;
 }

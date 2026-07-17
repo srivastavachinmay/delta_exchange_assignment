@@ -29,6 +29,7 @@ interface TickerState {
 
 interface TickerActions {
   upsert(ticker: Ticker): void;
+  upsertMany(tickers: readonly Ticker[]): void;
   reset(): void;
 }
 
@@ -48,6 +49,19 @@ export const useTickerStore = create<TickerStore>()(
           },
           false,
           'ticker/upsert',
+        );
+      },
+
+      upsertMany(tickers: readonly Ticker[]) {
+        if (tickers.length === 0) return;
+        set(
+          (prev) => {
+            const next = new Map(prev.tickers);
+            for (const t of tickers) next.set(t.symbol, t);
+            return { tickers: next as ReadonlyMap<TradingSymbol, Ticker> };
+          },
+          false,
+          'ticker/upsertMany',
         );
       },
 
