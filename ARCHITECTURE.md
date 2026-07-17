@@ -239,6 +239,64 @@ Components are responsible only for presentation.
 
 ---
 
+### High-Frequency Rendering Rule
+
+> **All future Claude Code implementation phases must follow this rule without exception. It is not optional and is not subject to tradeoffs.**
+
+High-frequency data — ticker updates, order book level changes, trade arrivals — must **never** be passed through multiple component levels as props.
+
+**Required pattern:**
+
+| Role | Responsibility | What it receives as props |
+|------|---------------|--------------------------|
+| **Container component** | Composes layout; renders leaf components | Symbol identity (`TradingSymbol`), configuration — nothing realtime |
+| **Leaf component** | Renders a single realtime data point | Symbol identity only — fetches its own slice via selector |
+
+**Correct:**
+```tsx
+// Container — stable props only
+function TickerBar() {
+  return SUPPORTED_SYMBOLS.map(s => <TickerCard key={s} symbol={s} />);
+}
+
+// Leaf — direct store subscription, not a prop
+const TickerCard = memo(function TickerCard({ symbol }: { symbol: TradingSymbol }) {
+  const ticker = useTickerStore(s => s.tickers.get(symbol));   // O(1) selector
+  // ...
+});
+```
+
+**Wrong:**
+```tsx
+// Container — DO NOT DO THIS
+function TickerBar() {
+  const tickers = useTickerStore(s => s.tickers);              // subscribes to ALL updates
+  return SUPPORTED_SYMBOLS.map(s => (
+    <TickerCard key={s} symbol={s} ticker={tickers.get(s)} />  // prop-drills realtime data
+  ));
+}
+
+// Leaf — DO NOT DO THIS
+function TickerCard({ symbol, ticker }: { symbol: TradingSymbol; ticker: Ticker }) {
+  // re-renders whenever parent re-renders, even if this symbol's data is unchanged
+}
+```
+
+**Why this rule exists:**
+
+When a container subscribes to `s.tickers` (the whole map), every update to any symbol re-renders the container and cascades to all children. When each leaf subscribes to `s.tickers.get(symbol)`, Zustand's `Object.is` comparison on the selector output means only the leaf whose symbol changed re-renders. This is the difference between O(n) and O(1) re-renders per update — visible in React Profiler as exactly one highlighted component per tick rather than the entire strip.
+
+**Enforcement checklist for every high-frequency component:**
+
+- [ ] Props contain only symbol identity and configuration — no price, quantity, timestamp, or any other realtime field
+- [ ] Selector targets the smallest possible slice: `s.tickers.get(symbol)`, not `s.tickers`
+- [ ] Component is wrapped in `React.memo`
+- [ ] Click/event handlers use `useCallback` with stable dependencies
+
+The `TickerCard` / `PriceDisplay` / `PercentageChange` pattern established in Phase 3 is the canonical template. Apply it identically to `OrderBookRow`, `TradeRow`, and every future high-frequency UI element.
+
+---
+
 ### WebSocket Access
 
 Only the communication layer may create or access browser WebSocket objects.
@@ -711,6 +769,7 @@ The following optimizations are architecturally planned but not yet implemented.
 - **`ReadonlyMap` in stores** — prevents accidental mutation; ensures reference stability for unchanged symbols in `Object.is` selector comparisons.
 - **`subscribeWithSelector` middleware** — Zustand's built-in support for granular subscriptions. Without it, every store update would re-render all subscribers.
 - **Channel isolation in `MessageRouter`** — unknown channel messages are dropped at parse time; they never reach domain code or trigger store writes.
+- **Direct leaf subscriptions** — high-frequency components (`TickerCard`, `OrderBookRow`, `TradeRow`) subscribe directly to their own data slice; containers pass only symbol identity as props. See [High-Frequency Rendering Rule](#high-frequency-rendering-rule).
 
 ---
 

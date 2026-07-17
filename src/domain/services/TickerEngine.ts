@@ -1,43 +1,57 @@
-/**
- * TickerEngine — Domain Service
- *
- * Responsibility:
- * - Transform raw ticker messages into Ticker domain entities
- * - Apply validation (price sanity, timestamp ordering)
- * - Compute derived fields (price change direction for flash animations)
- *
- * Design:
- * - Stateless: each call returns a new entity, no internal state
- * - Pure: given same inputs, returns same output
- * - No imports from application, infrastructure, or React
- * - Fully testable with plain Node — see tests/domain/TickerEngine.test.ts
- *
- * Phase 2: implement process() and validate() with actual Delta payload shape.
- */
-
 import type { RawTickerMessage } from '@/shared/types';
+import { createPrice } from '../valueObjects/Price';
 import type { Ticker } from '../entities/Ticker';
 
 export class TickerEngine {
   /**
    * Transform a raw ticker message into a typed Ticker entity.
-   *
-   * TODO Phase 2:
-   * - Map Delta-specific field names to our domain model
-   * - Apply price validation via createPrice()
-   * - Compute change24h direction for comparison with previous
+   * Throws on malformed payload — callers catch and discard.
    */
-  process(_message: RawTickerMessage): Ticker {
-    throw new Error('TickerEngine.process() not implemented — Phase 2');
+  process(message: RawTickerMessage): Ticker {
+    const { close, open } = message;
+
+    if (!Number.isFinite(close) || close <= 0) {
+      throw new RangeError(`[TickerEngine] invalid close for ${message.symbol}: ${close}`);
+    }
+
+    const change24h =
+      Number.isFinite(open) && open !== 0 ? ((close - open) / open) * 100 : 0;
+
+    return {
+      symbol: message.symbol,
+      lastPrice: createPrice(close),
+      markPrice: safePrice(message.mark_price),
+      indexPrice: safePrice(message.spot_price),
+      bestBid: safePrice(message.quotes?.best_bid),
+      bestAsk: safePrice(message.quotes?.best_ask),
+      change24h: Number.isFinite(change24h) ? change24h : 0,
+      volume24h: message.volume ?? 0,
+      high24h: safePriceNum(message.high),
+      low24h: safePriceNum(message.low),
+      openInterest: parseFloatSafe(message.oi),
+      fundingRate: parseFloatSafe(message.funding_rate),
+      timestamp: message.timestamp,
+    };
   }
 
-  /**
-   * Validate that a new ticker is a meaningful update over the previous.
-   * Returns false if the update should be discarded (stale timestamp, no change).
-   *
-   * TODO Phase 2: timestamp ordering check, price sanity check
-   */
-  isValidUpdate(_next: Ticker, _prev: Ticker | undefined): boolean {
-    throw new Error('TickerEngine.isValidUpdate() not implemented — Phase 2');
+  /** Returns false when next is stale (timestamp ≤ previous) — discard. */
+  isValidUpdate(next: Ticker, prev: Ticker | undefined): boolean {
+    if (!prev) return true;
+    return next.timestamp > prev.timestamp;
   }
+}
+
+function safePrice(raw: string | undefined | null): ReturnType<typeof createPrice> {
+  const val = parseFloat(raw ?? '0');
+  return createPrice(Number.isFinite(val) && val >= 0 ? val : 0);
+}
+
+function safePriceNum(raw: number | undefined): ReturnType<typeof createPrice> {
+  const val = raw ?? 0;
+  return createPrice(Number.isFinite(val) && val >= 0 ? val : 0);
+}
+
+function parseFloatSafe(raw: string | undefined | null): number {
+  const val = parseFloat(raw ?? '0');
+  return Number.isFinite(val) ? val : 0;
 }

@@ -43,7 +43,8 @@ export class MessageRouter implements MessageRouterPort {
     const message = this._parse(raw);
     if (!message) return;
 
-    const wireChannel = message.channel as string;
+    // v2/ticker uses `type` as the wire discriminator instead of `channel`.
+    const wireChannel = (message.channel ?? message.type) as string;
     const channel = WIRE_TO_CHANNEL[wireChannel];
 
     if (!channel) {
@@ -88,7 +89,6 @@ function isInboundMessage(value: unknown): value is InboundMessage {
     typeof value === 'object' &&
     value !== null &&
     typeof (value as Record<string, unknown>)['type'] === 'string' &&
-    typeof (value as Record<string, unknown>)['channel'] === 'string' &&
     typeof (value as Record<string, unknown>)['timestamp'] === 'number'
   );
 }

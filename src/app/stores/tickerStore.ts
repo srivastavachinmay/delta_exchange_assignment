@@ -28,7 +28,7 @@ interface TickerState {
 }
 
 interface TickerActions {
-  // Phase 2: upsert(ticker: Ticker): void
+  upsert(ticker: Ticker): void;
   reset(): void;
 }
 
@@ -38,6 +38,18 @@ export const useTickerStore = create<TickerStore>()(
   devtools(
     subscribeWithSelector((set) => ({
       tickers: new Map<TradingSymbol, Ticker>(),
+
+      upsert(ticker: Ticker) {
+        set(
+          (prev) => {
+            const next = new Map(prev.tickers);
+            next.set(ticker.symbol, ticker);
+            return { tickers: next as ReadonlyMap<TradingSymbol, Ticker> };
+          },
+          false,
+          'ticker/upsert',
+        );
+      },
 
       reset() {
         set({ tickers: new Map() }, false, 'ticker/reset');

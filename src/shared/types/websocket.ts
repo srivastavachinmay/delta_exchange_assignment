@@ -61,7 +61,8 @@ export type OutboundMessage = SubscribeMessage | UnsubscribeMessage;
 
 export interface BaseInboundMessage {
   readonly type: string;
-  readonly channel: Channel;
+  /** Present on most messages; v2/ticker uses `type` as the discriminator instead. */
+  readonly channel?: Channel;
   readonly timestamp: number;
 }
 
@@ -92,14 +93,29 @@ export interface ErrorMessage extends BaseInboundMessage {
 }
 
 /**
- * Raw ticker data as received from the server.
- * Fields will be typed precisely in Phase 2.
+ * Delta Exchange v2/ticker wire format — all fields at top level, no `payload` wrapper.
+ * `close` and `open` arrive as numbers; price strings (`mark_price`, etc.) are strings.
  */
 export interface RawTickerMessage extends BaseInboundMessage {
-  readonly type: 'ticker';
-  readonly channel: 'ticker';
+  readonly type: 'v2/ticker';
   readonly symbol: TradingSymbol;
-  readonly payload: Record<string, unknown>;
+  /** Last traded price — JavaScript number. */
+  readonly close: number;
+  /** 24-hour open price — JavaScript number. */
+  readonly open: number;
+  readonly high?: number;
+  readonly low?: number;
+  readonly volume?: number;
+  readonly mark_price?: string;
+  readonly spot_price?: string;
+  readonly oi?: string;
+  readonly funding_rate?: string;
+  readonly quotes?: {
+    readonly best_ask: string;
+    readonly best_bid: string;
+    readonly bid_size?: string;
+    readonly ask_size?: string;
+  } | null;
 }
 
 /**
