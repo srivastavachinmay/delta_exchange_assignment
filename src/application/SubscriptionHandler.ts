@@ -1,4 +1,5 @@
 import type { Channel, InboundMessage, SubscriptionAckMessage, TradingSymbol, UnsubscriptionAckMessage } from '@/shared/types';
+import { logger } from '@/shared/utils/DevelopmentLogger';
 
 export interface SubscriptionCallbacks {
   onAcknowledge(symbols: TradingSymbol[], channels: Channel[]): void;
@@ -10,11 +11,13 @@ export class SubscriptionHandler {
 
   handle(message: InboundMessage): void {
     if (isSubscriptionAck(message)) {
+      logger.subscriptionAck(message.payload.channels, message.payload.symbols);
       this.callbacks.onAcknowledge(message.payload.symbols, message.payload.channels);
       return;
     }
 
     if (isUnsubscriptionAck(message)) {
+      logger.subscriptionRemove(message.payload.channels, message.payload.symbols);
       this.callbacks.onRemove(message.payload.symbols, message.payload.channels);
       return;
     }

@@ -1,7 +1,8 @@
 import type { Channel, TradingSymbol, OutboundMessage } from '@/shared/types';
 import type { WebSocketManager } from './WebSocketManager';
+import { logger } from '@/shared/utils/DevelopmentLogger';
 
-// Internal Channel names differ from wire protocol names — this map owns the translation.
+// Internal Channel names → wire protocol names used by Delta Exchange.
 const PROTOCOL_CHANNEL: Readonly<Partial<Record<Channel, string>>> = {
   ticker: 'v2/ticker',
   orderbook: 'v2/orderbook',
@@ -37,6 +38,8 @@ export class SubscriptionManager {
     }
 
     if (fresh.length === 0) return;
+
+    logger.subscribeIntent(channel, fresh);
     this.manager.send(this._buildSubscribePayload(channel, fresh));
     this.callbacks?.onDesiredAdded(fresh, channel);
   }
@@ -59,6 +62,8 @@ export class SubscriptionManager {
     }
 
     if (removed.length === 0) return;
+
+    logger.unsubscribeIntent(channel, removed);
     this.manager.send(this._buildUnsubscribePayload(channel, removed));
     this.callbacks?.onDesiredRemoved(removed, channel);
   }
@@ -69,13 +74,13 @@ export class SubscriptionManager {
     const channels = this._buildChannelList();
     if (channels.length === 0) return;
 
+    logger.subscriptionReplay(channels.length);
     this.manager.send({
       type: 'subscribe',
       payload: { channels },
     });
   }
 
-  /** No-op until Phase N: reconcile desired vs server-confirmed state on ack. */
   handleAcknowledgement(
     _channels: readonly Channel[],
     _symbols: readonly TradingSymbol[],

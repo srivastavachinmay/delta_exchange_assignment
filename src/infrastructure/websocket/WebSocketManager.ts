@@ -5,21 +5,16 @@ import {
   HEARTBEAT_INTERVAL_MS,
 } from '@/shared/constants/websocket';
 import { INFRASTRUCTURE_CONFIG } from '@/infrastructure/config/SymbolConfig';
+import { logger } from '@/shared/utils/DevelopmentLogger';
 
-/**
- * Pre-serialized heartbeat ping. Sent at the transport level — not a typed
- * OutboundMessage because heartbeat is not a subscription-protocol concern.
- */
+// Pre-serialized — heartbeat bypasses typed send() because it is a transport-level
+// concern, not a subscription-protocol message.
 const HEARTBEAT_PING = JSON.stringify({ type: 'heartbeat' });
 
 type RawMessageListener = (raw: string) => void;
 type ReadyListener = () => void;
 
 export class WebSocketManager {
-  // -------------------------------------------------------------------------
-  // Singleton
-  // -------------------------------------------------------------------------
-
   private static instance: WebSocketManager | null = null;
 
   static getInstance(): WebSocketManager {
@@ -27,15 +22,11 @@ export class WebSocketManager {
     return WebSocketManager.instance;
   }
 
-  /** Reset singleton — test use only. */
+  /** Test use only. */
   static _resetForTesting(): void {
     WebSocketManager.instance?.disconnect();
     WebSocketManager.instance = null;
   }
-
-  // -------------------------------------------------------------------------
-  // Instance state
-  // -------------------------------------------------------------------------
 
   private socket: WebSocket | null = null;
   private reconnectAttempt = 0;
@@ -43,31 +34,13 @@ export class WebSocketManager {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   private readonly listeners = new Set<RawMessageListener>();
-
-  /**
-   * Fired on every socket open, including reconnects.
-   * SubscriptionManager registers here to replay desired subscriptions.
-   */
+  // SubscriptionManager registers here to replay desired subscriptions on every open.
   private readonly readyListeners = new Set<ReadyListener>();
-
-  /** True when disconnect() was called intentionally — suppresses reconnect. */
+  // Suppresses reconnect when close is caller-initiated.
   private intentionalDisconnect = false;
-
-  /**
-   * Status callbacks registered by the composition root.
-   * Bridges WebSocketManager lifecycle events → connectionStore writes,
-   * without Infrastructure depending on app/stores directly.
-   */
+  // Wired by the composition root — keeps Infrastructure free of app/stores imports.
   private statusCallbacks: ConnectionStatusCallbacks | null = null;
 
-  // -------------------------------------------------------------------------
-  // Public API
-  // -------------------------------------------------------------------------
-
-  /**
-   * Register status callbacks. Call this before connect().
-   * The composition root (WebSocketProvider) wires these to connectionStore actions.
-   */
   setStatusCallbacks(callbacks: ConnectionStatusCallbacks): void {
     this.statusCallbacks = callbacks;
   }
@@ -78,6 +51,7 @@ export class WebSocketManager {
 
     this.intentionalDisconnect = false;
     this.statusCallbacks?.onStatus('connecting');
+    logger.connecting(INFRASTRUCTURE_CONFIG.wsUrl);
     this._openSocket();
   }
 
@@ -90,8 +64,13 @@ export class WebSocketManager {
     this.statusCallbacks?.onStatus('disconnected');
   }
 
+  // Drops with a dev warning if the socket is not open — callers need no guard.
   send(message: OutboundMessage): void {
-    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    if (this.socket?.readyState !== WebSocket.OPEN) {
+      const state = this.socket ? readyStateLabel(this.socket.readyState) : 'no socket';
+      logger.sendDropped(`socket is ${state}`);
+      return;
+    }
     this.socket.send(JSON.stringify(message));
   }
 
@@ -127,18 +106,16 @@ export class WebSocketManager {
     return this.socket?.readyState === WebSocket.OPEN;
   }
 
-  // -------------------------------------------------------------------------
-  // Private
-  // -------------------------------------------------------------------------
-
   private _openSocket(): void {
     const socket = new WebSocket(INFRASTRUCTURE_CONFIG.wsUrl);
     this.socket = socket;
 
     socket.onopen = () => {
       if (this.socket !== socket) return;
+      const attempt = this.reconnectAttempt;
       this.reconnectAttempt = 0;
       this.statusCallbacks?.onConnected(Date.now());
+      logger.connected(attempt);
       this._startHeartbeat();
       this.readyListeners.forEach((l) => l());
     };
@@ -148,30 +125,34 @@ export class WebSocketManager {
       this.listeners.forEach((l) => l(data));
     };
 
-    socket.onclose = ({ code }) => {
+    socket.onclose = ({ code, reason, wasClean }: CloseEvent) => {
       if (this.socket !== socket) return;
       this._stopHeartbeat();
+      logger.closed(code, reason, this.intentionalDisconnect || wasClean);
       if (this.intentionalDisconnect) return;
-
-      console.info(`[WebSocketManager] closed (code=${code}), scheduling reconnect`);
       this._scheduleReconnect();
     };
 
     socket.onerror = () => {
       if (this.socket !== socket) return;
-      // onerror always precedes onclose — let onclose handle reconnect
+      logger.socketError();
+      // onerror always precedes onclose — let onclose drive reconnect and status.
       this.statusCallbacks?.onError('WebSocket error');
     };
   }
 
   private _scheduleReconnect(): void {
     if (this.reconnectAttempt >= RECONNECT_MAX_ATTEMPTS) {
+      logger.maxReconnectExhausted(RECONNECT_MAX_ATTEMPTS);
       this.statusCallbacks?.onError('Max reconnect attempts reached');
       return;
     }
 
     const delay = computeBackoffDelay(this.reconnectAttempt);
-    this.statusCallbacks?.onReconnecting(this.reconnectAttempt + 1);
+    const nextAttempt = this.reconnectAttempt + 1;
+
+    logger.scheduleReconnect(nextAttempt, RECONNECT_MAX_ATTEMPTS, delay);
+    this.statusCallbacks?.onReconnecting(nextAttempt);
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectAttempt++;
@@ -185,7 +166,6 @@ export class WebSocketManager {
     }, HEARTBEAT_INTERVAL_MS);
   }
 
-  /** Send a raw heartbeat ping — bypasses the typed send() intentionally. */
   private _sendHeartbeatPing(): void {
     if (this.socket?.readyState === WebSocket.OPEN) {
       this.socket.send(HEARTBEAT_PING);
@@ -208,5 +188,15 @@ export class WebSocketManager {
   }
 }
 
-/** Module-level singleton. Import this everywhere — not the class. */
+function readyStateLabel(state: number): string {
+  switch (state) {
+    case WebSocket.CONNECTING: return 'CONNECTING';
+    case WebSocket.OPEN:       return 'OPEN';
+    case WebSocket.CLOSING:    return 'CLOSING';
+    case WebSocket.CLOSED:     return 'CLOSED';
+    default:                   return `unknown(${state})`;
+  }
+}
+
+/** Import this singleton everywhere — not the class directly. */
 export const wsManager = WebSocketManager.getInstance();

@@ -1,11 +1,11 @@
 import type { InboundMessage, Channel } from '@/shared/types';
 import type { SubscriptionHandler } from './SubscriptionHandler';
 import type { MessageRouterPort, ChannelHandler } from '@/domain/ports/MessageRouterPort';
+import { logger } from '@/shared/utils/DevelopmentLogger';
 
 export type ChannelMessageHandler = ChannelHandler;
 
-// Maps Delta Exchange wire channel names → internal Channel names.
-// Incoming messages carry wire names; handlers are registered with internal names.
+// Wire channel names from Delta Exchange → internal Channel names.
 const WIRE_TO_CHANNEL: Readonly<Partial<Record<string, Channel>>> = {
   'v2/ticker': 'ticker',
   l2_orderbook: 'orderbook',
@@ -13,6 +13,9 @@ const WIRE_TO_CHANNEL: Readonly<Partial<Record<string, Channel>>> = {
   subscription: 'subscription',
   connection: 'connection',
 };
+
+// Frames that pass JSON.parse but lack the InboundMessage shape — suppress shape warnings for these.
+const EXPECTED_NON_EVENT_TYPES = new Set(['heartbeat', 'heartbeat_response']);
 
 export class MessageRouter implements MessageRouterPort {
   private readonly handlers = new Map<Channel, Set<ChannelMessageHandler>>();
@@ -37,25 +40,46 @@ export class MessageRouter implements MessageRouterPort {
   }
 
   route(raw: string): void {
-    const message = this.parse(raw);
+    const message = this._parse(raw);
     if (!message) return;
 
-    const channel = WIRE_TO_CHANNEL[message.channel as string];
-    if (!channel) return;
+    const wireChannel = message.channel as string;
+    const channel = WIRE_TO_CHANNEL[wireChannel];
+
+    if (!channel) {
+      logger.unknownWireChannel(wireChannel);
+      return;
+    }
 
     const handlers = this.handlers.get(channel);
-    if (!handlers || handlers.size === 0) return;
+    if (!handlers || handlers.size === 0) {
+      logger.noHandlersForChannel(channel);
+      return;
+    }
 
+    logger.incomingMessage(wireChannel, extractSymbol(message));
     handlers.forEach((h) => h(message));
   }
 
-  private parse(raw: string): InboundMessage | null {
+  private _parse(raw: string): InboundMessage | null {
+    let parsed: unknown;
+
     try {
-      const parsed: unknown = JSON.parse(raw);
-      return isInboundMessage(parsed) ? parsed : null;
+      parsed = JSON.parse(raw);
     } catch {
+      logger.parseFailureJson(raw.slice(0, 120));
       return null;
     }
+
+    if (!isInboundMessage(parsed)) {
+      const type = extractType(parsed);
+      if (!EXPECTED_NON_EVENT_TYPES.has(type)) {
+        logger.parseFailureShape(JSON.stringify(parsed).slice(0, 120));
+      }
+      return null;
+    }
+
+    return parsed;
   }
 }
 
@@ -67,4 +91,20 @@ function isInboundMessage(value: unknown): value is InboundMessage {
     typeof (value as Record<string, unknown>)['channel'] === 'string' &&
     typeof (value as Record<string, unknown>)['timestamp'] === 'number'
   );
+}
+
+function extractType(value: unknown): string {
+  if (typeof value === 'object' && value !== null) {
+    const t = (value as Record<string, unknown>)['type'];
+    if (typeof t === 'string') return t;
+  }
+  return '';
+}
+
+function extractSymbol(msg: InboundMessage): string | undefined {
+  if ('symbol' in msg) {
+    const sym = (msg as { symbol?: unknown }).symbol;
+    return typeof sym === 'string' ? sym : undefined;
+  }
+  return undefined;
 }
