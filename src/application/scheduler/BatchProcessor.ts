@@ -82,13 +82,21 @@ export class BatchProcessor implements IBatchProcessor {
 const EMPTY: readonly BatchGroup[] = [];
 
 /**
- * Resolve the internal channel from a message.
- * v2/ticker uses `type` as discriminator; all others carry `channel`.
+ * Resolve the internal channel from a message, normalizing wire-format names.
+ * v2/ticker uses `type` as discriminator; orderbook and trades may carry
+ * wire channel names (l2_orderbook, all_trades) in their `channel` field.
  */
 function resolveChannel(msg: InboundMessage): Channel | undefined {
-  if (msg.channel) return msg.channel;
-  if (msg.type === 'v2/ticker') return 'ticker';
-  return undefined;
+  const raw = (msg.channel as string | undefined) ?? msg.type;
+  switch (raw) {
+    case 'v2/ticker':
+    case 'ticker':      return 'ticker';
+    case 'l2_orderbook':
+    case 'orderbook':   return 'orderbook';
+    case 'all_trades':
+    case 'trades':      return 'trades';
+    default:            return undefined;
+  }
 }
 
 function resolveSymbol(msg: InboundMessage): TradingSymbol | undefined {

@@ -1,6 +1,6 @@
 import { ConnectionStatusBar } from '@/features/status/ConnectionStatusBar';
 import { TickerBar } from '@/features/ticker/components/TickerBar';
-import { OrderBookPlaceholder } from '@/features/orderBook/OrderBookPlaceholder';
+import { OrderBookFeature } from '@/features/orderBook/OrderBookFeature';
 import { TradesPlaceholder } from '@/features/trades/TradesPlaceholder';
 import styles from './AppShell.module.css';
 
@@ -11,8 +11,6 @@ import styles from './AppShell.module.css';
  * the layout grid. Features are independent — they import only from their own
  * stores, never from each other. Cross-panel coordination goes through the
  * Application Layer, not through this component.
- *
- * Phase 2/3/4: replace Placeholder components with real implementations.
  */
 export function AppShell() {
   return (
@@ -26,7 +24,7 @@ export function AppShell() {
       </div>
 
       <div className={styles.bookArea}>
-        <OrderBookPlaceholder />
+        <OrderBookFeature />
       </div>
 
       <div className={styles.tradesArea}>

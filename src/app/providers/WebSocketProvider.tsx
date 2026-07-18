@@ -9,13 +9,16 @@ import { MessageQueue } from '@/application/scheduler/MessageQueue';
 import { BatchProcessor } from '@/application/scheduler/BatchProcessor';
 import { RAFScheduler } from '@/application/scheduler/RAFScheduler';
 import { TickerPublisher } from '@/application/ticker/TickerPublisher';
+import { OrderBookPublisher } from '@/application/orderbook/OrderBookPublisher';
 import { FocusSymbolUseCase } from '@/application/useCases/FocusSymbolUseCase';
 import { TickerEngine } from '@/domain/services/TickerEngine';
+import { OrderBookEngine } from '@/domain/services/OrderBookEngine';
 import { STORAGE_KEYS } from '@/domain/ports/StoragePort';
-import type { InboundMessage, RawTickerMessage } from '@/shared/types';
+import type { InboundMessage, RawTickerMessage, RawOrderBookMessage } from '@/shared/types';
 import { useConnectionStore } from '@/app/stores/connectionStore';
 import { useSubscriptionStore } from '@/app/stores/subscriptionStore';
 import { useTickerStore } from '@/app/stores/tickerStore';
+import { useOrderBookStore } from '@/app/stores/orderBookStore';
 import { useFocusedSymbolStore } from '@/app/stores/focusedSymbolStore';
 
 interface Props {
@@ -42,6 +45,7 @@ export function WebSocketProvider({ children }: Props) {
     const batchProcessor = new BatchProcessor();
     const rafScheduler = new RAFScheduler();
     const tickerPublisher = new TickerPublisher();
+    const orderBookPublisher = new OrderBookPublisher();
 
     // Queue is injected so the router enqueues market data instead of dispatching directly.
     // Control messages (subscription, connection) still dispatch immediately.
@@ -60,8 +64,9 @@ export function WebSocketProvider({ children }: Props) {
     const adapter = new WebSocketAdapter(router, wsManager, subscriptionManager);
     adapter.initialize();
 
-    // --- Ticker domain engine ---
+    // --- Domain engines ---
     const tickerEngine = new TickerEngine();
+    const orderBookEngine = new OrderBookEngine();
 
     // RAF frame callback: drain → batch → process → TickerPublisher → store.
     // TickerPublisher throttles store writes to the display interval so React
@@ -93,13 +98,32 @@ export function WebSocketProvider({ children }: Props) {
               tickerPublisher.update(latestTicker);
             }
           }
-          // orderbook and trades: handled in later phases
+
+          if (batch.channel === 'orderbook') {
+            for (const msg of batch.messages) {
+              const raw = msg as RawOrderBookMessage;
+              try {
+                orderBookEngine.apply(raw);
+                orderBookPublisher.markDirty(raw.symbol);
+              } catch (err) {
+                if (import.meta.env.DEV) {
+                  console.warn('[OrderBookEngine] message dropped:', err);
+                }
+              }
+            }
+          }
         }
       }
 
-      // Always attempt flush — ensures pending tickers drain even if traffic pauses.
+      // Always attempt flush — ensures pending data drains even if traffic pauses.
       tickerPublisher.tryFlush(timestamp, (tickers) => {
         useTickerStore.getState().upsertMany(tickers);
+      });
+      orderBookPublisher.tryFlush(timestamp, (symbols) => {
+        for (const symbol of symbols) {
+          const book = orderBookEngine.snapshot(symbol);
+          if (book) useOrderBookStore.getState().upsert(book);
+        }
       });
     });
 
@@ -137,6 +161,7 @@ export function WebSocketProvider({ children }: Props) {
       useConnectionStore.getState().reset();
       useSubscriptionStore.getState().reset();
       useTickerStore.getState().reset();
+      useOrderBookStore.getState().reset();
     };
   }, []);
 

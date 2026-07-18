@@ -5,7 +5,7 @@ import { logger } from '@/shared/utils/DevelopmentLogger';
 // Internal Channel names → wire protocol names used by Delta Exchange.
 const PROTOCOL_CHANNEL: Readonly<Partial<Record<Channel, string>>> = {
   ticker: 'v2/ticker',
-  orderbook: 'v2/orderbook',
+  orderbook: 'l2_orderbook',
   trades: 'v2/trades',
 };
 

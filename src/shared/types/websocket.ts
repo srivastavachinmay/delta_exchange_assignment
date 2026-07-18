@@ -119,14 +119,16 @@ export interface RawTickerMessage extends BaseInboundMessage {
 }
 
 /**
- * Raw order book message — could be snapshot or delta.
- * Discriminated by payload.type in Phase 3.
+ * Raw order book message — top-level bids/asks as [price, size] string tuples.
+ * No payload wrapper, no sequence number in the observed wire format.
+ * First message after subscription is a full snapshot; subsequent are deltas.
+ * A size of "0" signals level removal.
  */
 export interface RawOrderBookMessage extends BaseInboundMessage {
-  readonly type: 'orderbook';
-  readonly channel: 'orderbook';
+  readonly type: 'l2_orderbook';
   readonly symbol: TradingSymbol;
-  readonly payload: Record<string, unknown>;
+  readonly bids: readonly [string, string][];
+  readonly asks: readonly [string, string][];
 }
 
 /**

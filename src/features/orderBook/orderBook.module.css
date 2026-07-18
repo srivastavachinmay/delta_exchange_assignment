@@ -1,0 +1,156 @@
+/* ── Panel ───────────────────────────────────────────────────────────── */
+.panel {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-bg-surface);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  border-right: 1px solid var(--color-border);
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 36px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.headerTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  letter-spacing: -0.01em;
+}
+
+.liveBadge {
+  font-size: 9px;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  letter-spacing: 0.1em;
+  color: var(--color-bid);
+  border: 1px solid color-mix(in srgb, var(--color-bid) 50%, transparent);
+  padding: 1px 5px 1px 4px;
+  border-radius: 3px;
+}
+
+/* ── Section (asks / bids) ───────────────────────────────────────────── */
+.section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ── Column header row ───────────────────────────────────────────────── */
+.colHeader {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  padding: 4px 10px;
+  font-size: 9px;
+  font-family: var(--font-sans);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--color-border-subtle);
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.colHeaderRight {
+  text-align: right;
+}
+
+/* ── Rows container ──────────────────────────────────────────────────── */
+.rows {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Asks: pin rows to bottom so best ask sits closest to the mid bar */
+.rowsAsk {
+  justify-content: flex-end;
+}
+
+/* Bids: rows start from top so best bid sits closest to the mid bar */
+.rowsBid {
+  justify-content: flex-start;
+}
+
+/* ── Individual row ──────────────────────────────────────────────────── */
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  padding: 0 10px;
+  line-height: 20px;
+  font-size: 11.5px;
+  letter-spacing: -0.01em;
+  cursor: default;
+}
+
+.row:hover {
+  background-color: rgba(255, 255, 255, 0.025);
+}
+
+/* ── Price / size cells ──────────────────────────────────────────────── */
+.askPrice {
+  color: var(--color-ask);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.bidPrice {
+  color: var(--color-bid);
+  font-variant-numeric: tabular-nums;
+}
+
+.size {
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.total {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.sizeRight {
+  text-align: right;
+}
+
+/* ── Mid price bar ───────────────────────────────────────────────────── */
+.midBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 10px;
+  border-top: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border-subtle);
+  flex-shrink: 0;
+  background-color: rgba(255, 255, 255, 0.015);
+}
+
+.midLabel {
+  font-size: 9px;
+  font-family: var(--font-sans);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 1px;
+  user-select: none;
+}
+
+.midPrice {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
