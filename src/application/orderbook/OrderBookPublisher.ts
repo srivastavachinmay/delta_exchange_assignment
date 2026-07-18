@@ -1,12 +1,10 @@
 import type { TradingSymbol } from '@/shared/types';
+import type { OrderBook } from '@/domain/entities/OrderBook';
+import type { OrderBookViewModel } from '@/domain/entities/OrderBookViewModel';
+import { buildViewModel } from '@/domain/entities/OrderBookViewModel';
 
 export const DEFAULT_ORDERBOOK_PUBLISH_INTERVAL_MS = 100;
 
-/**
- * Tracks which symbols have received updates since the last flush.
- * The engine's Maps are always up-to-date; this gate controls how often
- * the expensive snapshot() → store write path runs.
- */
 export class OrderBookPublisher {
   private readonly dirty = new Set<TradingSymbol>();
   private lastPublishAt = 0;
@@ -28,5 +26,9 @@ export class OrderBookPublisher {
     this.dirty.clear();
     this.lastPublishAt = timestamp;
     onPublish(symbols);
+  }
+
+  transform(book: OrderBook, step: number): OrderBookViewModel {
+    return buildViewModel(book, step);
   }
 }

@@ -1,10 +1,8 @@
 import { memo } from 'react';
 import type { TradingSymbol } from '@/shared/types';
-import { useOrderBookStore } from '@/app/stores/orderBookStore';
+import { useOrderBookViewStore } from '@/app/stores/orderBookViewStore';
 import { OrderBookRow } from './OrderBookRow';
 import styles from '../orderBook.module.css';
-
-const MAX_ROWS = 10;
 
 interface Props {
   readonly symbol: TradingSymbol;
@@ -13,19 +11,10 @@ interface Props {
 }
 
 export const BidList = memo(function BidList({ symbol, precision, baseAsset }: Props) {
-  const bids = useOrderBookStore((s) => s.books.get(symbol)?.bids);
+  const bids = useOrderBookViewStore((s) => s.viewModels.get(symbol)?.bids ?? EMPTY);
 
-  // Bids from snapshot() are sorted descending (best bid = highest price first).
-  // Display as-is: best bid at top, closest to MidPriceBar.
-  let displayBids: readonly [number, number, number][] = EMPTY;
-  if (bids && bids.length > 0) {
-    let cum = 0;
-    displayBids = bids.slice(0, MAX_ROWS).map(([price, size]) => {
-      cum += size;
-      return [price, size, cum] as [number, number, number];
-    });
-  }
-
+  // bids are sorted descending (best bid first = highest price = smallest cumulative).
+  // Display as-is: best bid at top, closest to SpreadBar.
   return (
     <div className={styles.section}>
       <div className={styles.colHeader}>
@@ -34,12 +23,13 @@ export const BidList = memo(function BidList({ symbol, precision, baseAsset }: P
         <span className={styles.colHeaderRight}>Total ({baseAsset})</span>
       </div>
       <div className={`${styles.rows} ${styles.rowsBid}`}>
-        {displayBids.map(([price, size, total]) => (
+        {bids.map((level) => (
           <OrderBookRow
-            key={price}
-            price={price}
-            size={size}
-            total={total}
+            key={level.price}
+            price={level.price}
+            size={level.size}
+            total={level.cumulativeSize}
+            depthPercent={level.depthPercent}
             precision={precision}
             side="bid"
           />
@@ -49,4 +39,4 @@ export const BidList = memo(function BidList({ symbol, precision, baseAsset }: P
   );
 });
 
-const EMPTY: readonly [number, number, number][] = [];
+const EMPTY = [] as const;

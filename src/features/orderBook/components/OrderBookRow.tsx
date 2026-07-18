@@ -5,18 +5,28 @@ interface Props {
   readonly price: number;
   readonly size: number;
   readonly total: number;
+  readonly depthPercent: number;
   readonly precision: number;
   readonly side: 'bid' | 'ask';
 }
 
-export const OrderBookRow = memo(function OrderBookRow({ price, size, total, precision, side }: Props) {
+export const OrderBookRow = memo(function OrderBookRow({
+  price,
+  size,
+  total,
+  depthPercent,
+  precision,
+  side,
+}: Props) {
   const priceStr = formatPrice(price, precision);
   const sizeStr = formatSize(size);
   const totalStr = formatSize(total);
+  const barStyle = { width: `${depthPercent * 100}%` };
 
   if (side === 'ask') {
     return (
       <div className={styles.row}>
+        <div className={`${styles.depthBar} ${styles.depthBarAsk}`} style={barStyle} />
         <span className={styles.total}>{totalStr}</span>
         <span className={styles.size}>{sizeStr}</span>
         <span className={styles.askPrice}>{priceStr}</span>
@@ -26,6 +36,7 @@ export const OrderBookRow = memo(function OrderBookRow({ price, size, total, pre
 
   return (
     <div className={styles.row}>
+      <div className={`${styles.depthBar} ${styles.depthBarBid}`} style={barStyle} />
       <span className={styles.bidPrice}>{priceStr}</span>
       <span className={styles.size}>{sizeStr}</span>
       <span className={`${styles.total} ${styles.sizeRight}`}>{totalStr}</span>

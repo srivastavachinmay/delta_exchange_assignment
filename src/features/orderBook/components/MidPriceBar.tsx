@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import type { TradingSymbol } from '@/shared/types';
-import { useOrderBookStore } from '@/app/stores/orderBookStore';
+import { useOrderBookViewStore } from '@/app/stores/orderBookViewStore';
 import styles from '../orderBook.module.css';
 
 interface Props {
@@ -9,11 +9,9 @@ interface Props {
 }
 
 export const MidPriceBar = memo(function MidPriceBar({ symbol, precision }: Props) {
-  const midPrice = useOrderBookStore((s) => {
-    const book = s.books.get(symbol);
-    if (!book || book.bids.length === 0 || book.asks.length === 0) return null;
-    return (book.bids[0]![0] + book.asks[0]![0]) / 2;
-  });
+  const midPrice = useOrderBookViewStore(
+    (s) => s.viewModels.get(symbol)?.spread?.midPrice ?? null,
+  );
 
   return (
     <div className={styles.midBar}>

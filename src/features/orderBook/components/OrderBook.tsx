@@ -3,6 +3,8 @@ import { getSymbolConfig } from '@/shared/constants/symbols';
 import { AskList } from './AskColumn';
 import { BidList } from './BidColumn';
 import { MidPriceBar } from './MidPriceBar';
+import { SpreadBar } from './SpreadBar';
+import { GroupingControl } from './GroupingControl';
 import styles from '../orderBook.module.css';
 
 interface Props {
@@ -18,8 +20,10 @@ export function OrderBook({ symbol }: Props) {
       <div className={styles.header}>
         <span className={styles.headerTitle}>Order Book — {symbol}</span>
         <span className={styles.liveBadge}>LIVE</span>
+        <GroupingControl symbol={symbol} />
       </div>
       <AskList symbol={symbol} precision={config.displayPrecision} baseAsset={baseAsset} />
+      <SpreadBar symbol={symbol} precision={config.displayPrecision} />
       <MidPriceBar symbol={symbol} precision={config.displayPrecision} />
       <BidList symbol={symbol} precision={config.displayPrecision} baseAsset={baseAsset} />
     </div>

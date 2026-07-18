@@ -1,10 +1,8 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import type { TradingSymbol } from '@/shared/types';
-import { useOrderBookStore } from '@/app/stores/orderBookStore';
+import { useOrderBookViewStore } from '@/app/stores/orderBookViewStore';
 import { OrderBookRow } from './OrderBookRow';
 import styles from '../orderBook.module.css';
-
-const MAX_ROWS = 10;
 
 interface Props {
   readonly symbol: TradingSymbol;
@@ -13,22 +11,11 @@ interface Props {
 }
 
 export const AskList = memo(function AskList({ symbol, precision, baseAsset }: Props) {
-  const asks = useOrderBookStore((s) => s.books.get(symbol)?.asks);
+  const asks = useOrderBookViewStore((s) => s.viewModels.get(symbol)?.asks ?? EMPTY);
 
-  // Asks from snapshot() are sorted ascending (best ask = lowest price first).
-  // Take the best MAX_ROWS, reverse so the highest price appears at top
-  // and the best ask (closest to mid) sits at the bottom, adjacent to MidPriceBar.
-  let displayAsks: readonly [number, number, number][] = EMPTY;
-  if (asks && asks.length > 0) {
-    const sliced = asks.slice(0, MAX_ROWS);
-    let cum = 0;
-    const pairs: [number, number, number][] = sliced.map(([price, size]) => {
-      cum += size;
-      return [price, size, cum];
-    });
-    pairs.reverse();
-    displayAsks = pairs;
-  }
+  // asks are sorted ascending (best ask = lowest price first, smallest cumulative first).
+  // Reverse for display: highest price at top, best ask at bottom adjacent to SpreadBar.
+  const displayAsks = useMemo(() => [...asks].reverse(), [asks]);
 
   return (
     <div className={styles.section}>
@@ -38,12 +25,13 @@ export const AskList = memo(function AskList({ symbol, precision, baseAsset }: P
         <span className={styles.colHeaderRight}>Price (USD)</span>
       </div>
       <div className={`${styles.rows} ${styles.rowsAsk}`}>
-        {displayAsks.map(([price, size, total]) => (
+        {displayAsks.map((level) => (
           <OrderBookRow
-            key={price}
-            price={price}
-            size={size}
-            total={total}
+            key={level.price}
+            price={level.price}
+            size={level.size}
+            total={level.cumulativeSize}
+            depthPercent={level.depthPercent}
             precision={precision}
             side="ask"
           />
@@ -53,4 +41,4 @@ export const AskList = memo(function AskList({ symbol, precision, baseAsset }: P
   );
 });
 
-const EMPTY: readonly [number, number, number][] = [];
+const EMPTY = [] as const;

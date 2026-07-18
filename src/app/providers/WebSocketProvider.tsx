@@ -19,6 +19,8 @@ import { useConnectionStore } from '@/app/stores/connectionStore';
 import { useSubscriptionStore } from '@/app/stores/subscriptionStore';
 import { useTickerStore } from '@/app/stores/tickerStore';
 import { useOrderBookStore } from '@/app/stores/orderBookStore';
+import { useOrderBookViewStore } from '@/app/stores/orderBookViewStore';
+import { useGroupingStore } from '@/app/stores/groupingStore';
 import { useFocusedSymbolStore } from '@/app/stores/focusedSymbolStore';
 
 interface Props {
@@ -122,12 +124,31 @@ export function WebSocketProvider({ children }: Props) {
       orderBookPublisher.tryFlush(timestamp, (symbols) => {
         for (const symbol of symbols) {
           const book = orderBookEngine.snapshot(symbol);
-          if (book) useOrderBookStore.getState().upsert(book);
+          if (!book) continue;
+          useOrderBookStore.getState().upsert(book);
+          const step = useGroupingStore.getState().getStep(symbol);
+          const vm = orderBookPublisher.transform(book, step);
+          useOrderBookViewStore.getState().upsert(vm);
         }
       });
     });
 
     rafScheduler.start();
+
+    // Rebuild view models immediately when grouping step changes — no new WS data needed.
+    const unsubscribeGrouping = useGroupingStore.subscribe(
+      (s) => s.steps,
+      (newSteps, prevSteps) => {
+        for (const [symbol, step] of newSteps) {
+          if (prevSteps.get(symbol) !== step) {
+            const book = orderBookEngine.snapshot(symbol);
+            if (!book) continue;
+            const vm = orderBookPublisher.transform(book, step);
+            useOrderBookViewStore.getState().upsert(vm);
+          }
+        }
+      },
+    );
 
     // --- Focused symbol: restore from storage on mount, persist on change ---
     const focusUseCase = new FocusSymbolUseCase(
@@ -156,12 +177,15 @@ export function WebSocketProvider({ children }: Props) {
       unschedule();
       rafScheduler.stop();
       unsubscribeFocus();
+      unsubscribeGrouping();
       adapter.cleanup();
       wsManager.disconnect();
       useConnectionStore.getState().reset();
       useSubscriptionStore.getState().reset();
       useTickerStore.getState().reset();
       useOrderBookStore.getState().reset();
+      useOrderBookViewStore.getState().reset();
+      useGroupingStore.getState().reset();
     };
   }, []);
 
