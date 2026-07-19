@@ -14,13 +14,16 @@ import { FocusSymbolUseCase } from '@/application/useCases/FocusSymbolUseCase';
 import { TickerEngine } from '@/domain/services/TickerEngine';
 import { OrderBookEngine } from '@/domain/services/OrderBookEngine';
 import { STORAGE_KEYS } from '@/domain/ports/StoragePort';
-import type { InboundMessage, RawTickerMessage, RawOrderBookMessage } from '@/shared/types';
+import { TradePublisher } from '@/application/trades/TradePublisher';
+import { TradeEngine } from '@/domain/services/TradeEngine';
+import type { InboundMessage, RawTickerMessage, RawOrderBookMessage, RawTradeMessage } from '@/shared/types';
 import { useConnectionStore } from '@/app/stores/connectionStore';
 import { useSubscriptionStore } from '@/app/stores/subscriptionStore';
 import { useTickerStore } from '@/app/stores/tickerStore';
 import { useOrderBookStore } from '@/app/stores/orderBookStore';
 import { useOrderBookViewStore } from '@/app/stores/orderBookViewStore';
 import { useGroupingStore } from '@/app/stores/groupingStore';
+import { useTradeStore } from '@/app/stores/tradeStore';
 import { useFocusedSymbolStore } from '@/app/stores/focusedSymbolStore';
 
 interface Props {
@@ -48,6 +51,7 @@ export function WebSocketProvider({ children }: Props) {
     const rafScheduler = new RAFScheduler();
     const tickerPublisher = new TickerPublisher();
     const orderBookPublisher = new OrderBookPublisher();
+    const tradePublisher = new TradePublisher();
 
     // Queue is injected so the router enqueues market data instead of dispatching directly.
     // Control messages (subscription, connection) still dispatch immediately.
@@ -69,6 +73,7 @@ export function WebSocketProvider({ children }: Props) {
     // --- Domain engines ---
     const tickerEngine = new TickerEngine();
     const orderBookEngine = new OrderBookEngine();
+    const tradeEngine = new TradeEngine();
 
     // RAF frame callback: drain → batch → process → TickerPublisher → store.
     // TickerPublisher throttles store writes to the display interval so React
@@ -114,6 +119,20 @@ export function WebSocketProvider({ children }: Props) {
               }
             }
           }
+
+          if (batch.channel === 'trades') {
+            for (const msg of batch.messages) {
+              const raw = msg as RawTradeMessage;
+              try {
+                tradeEngine.apply(raw);
+                tradePublisher.markDirty(raw.symbol);
+              } catch (err) {
+                if (import.meta.env.DEV) {
+                  console.warn('[TradeEngine] message dropped:', err);
+                }
+              }
+            }
+          }
         }
       }
 
@@ -129,6 +148,14 @@ export function WebSocketProvider({ children }: Props) {
           const step = useGroupingStore.getState().getStep(symbol);
           const vm = orderBookPublisher.transform(book, step);
           useOrderBookViewStore.getState().upsert(vm);
+        }
+      });
+      tradePublisher.tryFlush(timestamp, (symbols) => {
+        const nowMs = Date.now();
+        for (const symbol of symbols) {
+          const snapshot = tradeEngine.snapshot(symbol, nowMs);
+          if (!snapshot) continue;
+          useTradeStore.getState().upsert(snapshot);
         }
       });
     });
@@ -186,6 +213,7 @@ export function WebSocketProvider({ children }: Props) {
       useOrderBookStore.getState().reset();
       useOrderBookViewStore.getState().reset();
       useGroupingStore.getState().reset();
+      useTradeStore.getState().reset();
     };
   }, []);
 

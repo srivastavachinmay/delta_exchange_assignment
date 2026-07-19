@@ -1,7 +1,7 @@
 import { ConnectionStatusBar } from '@/features/status/ConnectionStatusBar';
 import { TickerBar } from '@/features/ticker/components/TickerBar';
 import { OrderBookFeature } from '@/features/orderBook/OrderBookFeature';
-import { TradesPlaceholder } from '@/features/trades/TradesPlaceholder';
+import { TradesFeature } from '@/features/trades/TradesFeature';
 import styles from './AppShell.module.css';
 
 /**
@@ -28,7 +28,7 @@ export function AppShell() {
       </div>
 
       <div className={styles.tradesArea}>
-        <TradesPlaceholder />
+        <TradesFeature />
       </div>
     </div>
   );

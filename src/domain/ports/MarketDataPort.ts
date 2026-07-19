@@ -14,11 +14,11 @@
  */
 
 import type { Channel, TradingSymbol } from '@/shared/types';
-import type { RawTickerMessage, RawOrderBookMessage, RawTradesMessage } from '@/shared/types';
+import type { RawTickerMessage, RawOrderBookMessage, RawTradeMessage } from '@/shared/types';
 
 export type TickerHandler = (message: RawTickerMessage) => void;
 export type OrderBookHandler = (message: RawOrderBookMessage) => void;
-export type TradesHandler = (message: RawTradesMessage) => void;
+export type TradesHandler = (message: RawTradeMessage) => void;
 
 export interface MarketDataPort {
   /**

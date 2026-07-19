@@ -1,10 +1,3 @@
-/**
- * Trade entity — a single executed trade on the exchange.
- *
- * Immutable. The trade engine maintains an ordered collection of these.
- * 'buy' = aggressor was a buyer (price moved up). 'sell' = price moved down.
- */
-
 import type { TradingSymbol } from '@/shared/types';
 import type { Price } from '../valueObjects/Price';
 
@@ -16,5 +9,18 @@ export interface Trade {
   readonly price: Price;
   readonly size: number;
   readonly side: TradeSide;
-  readonly timestamp: number;
+  readonly timestamp: number; // milliseconds
+}
+
+export interface TradeStats {
+  readonly volume1mBuy: number;
+  readonly volume1mSell: number;
+  readonly count1m: number;
+  readonly avgSize1m: number;
+}
+
+export interface TradeSnapshot {
+  readonly symbol: TradingSymbol;
+  readonly trades: readonly Trade[];
+  readonly stats: TradeStats;
 }

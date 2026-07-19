@@ -1,48 +1,69 @@
-/**
- * TradeEngine — Domain Service
- *
- * Responsibility:
- * - Append incoming trades to an ordered collection
- * - Maintain a bounded ring buffer (prevents unbounded memory growth)
- * - Deduplicate by trade ID (exchange may re-send on reconnect)
- *
- * Design:
- * - Stateless: caller owns and passes the trade collection
- * - Max capacity is configurable (default 200 — enough for scrollable UI)
- * - Pure: append(trades, newTrade) → updatedTrades
- *
- * Phase 4: implement append() and parseMessage() with actual Delta payload.
- */
+import type { RawTradeMessage, TradingSymbol } from '@/shared/types';
+import type { Trade, TradeStats, TradeSnapshot } from '../entities/Trade';
+import { createPrice } from '../valueObjects/Price';
 
-import type { RawTradesMessage } from '@/shared/types';
-import type { Trade } from '../entities/Trade';
-
-export const DEFAULT_TRADE_CAPACITY = 200;
+export const MAX_TRADES = 100;
+const ONE_MINUTE_MS = 60_000;
 
 export class TradeEngine {
-  /**
-   * Parse a raw trades message into an array of Trade entities.
-   * A single WS message may contain multiple trade executions.
-   *
-   * TODO Phase 4:
-   * - Map Delta payload fields to Trade entity
-   * - Validate price, size, side fields
-   * - Assign monotonic IDs if server doesn't provide them
-   */
-  parseMessage(_message: RawTradesMessage): Trade[] {
-    throw new Error('TradeEngine.parseMessage() not implemented — Phase 4');
+  private readonly state = new Map<TradingSymbol, Trade[]>();
+
+  apply(message: RawTradeMessage): void {
+    const price = parseFloat(String(message.price).replace(/,/g, ''));
+    if (!Number.isFinite(price) || price <= 0) return;
+    if (!Number.isFinite(message.size) || message.size <= 0) return;
+
+    const trade: Trade = {
+      id: `${message.symbol}-${message.timestamp}`,
+      symbol: message.symbol,
+      price: createPrice(price),
+      size: message.size,
+      side: message.buyer_role === 'taker' ? 'buy' : 'sell',
+      timestamp: Math.floor(message.timestamp / 1000),
+    };
+
+    const existing = this.state.get(message.symbol) ?? [];
+    const updated = [trade, ...existing];
+    this.state.set(message.symbol, updated.length > MAX_TRADES ? updated.slice(0, MAX_TRADES) : updated);
   }
 
-  /**
-   * Append new trades to the existing collection, respecting capacity.
-   * Newest trades appear first (prepend). Oldest are dropped when full.
-   *
-   * TODO Phase 4:
-   * - Deduplicate by trade ID
-   * - Slice to capacity
-   * - Return new array reference (immutable update pattern)
-   */
-  append(_current: readonly Trade[], _incoming: readonly Trade[]): readonly Trade[] {
-    throw new Error('TradeEngine.append() not implemented — Phase 4');
+  snapshot(symbol: TradingSymbol, nowMs: number): TradeSnapshot | null {
+    const trades = this.state.get(symbol);
+    if (!trades) return null;
+
+    return {
+      symbol,
+      trades,
+      stats: computeStats(trades, nowMs),
+    };
   }
+
+  clear(symbol: TradingSymbol): void {
+    this.state.delete(symbol);
+  }
+}
+
+function computeStats(trades: readonly Trade[], nowMs: number): TradeStats {
+  const cutoff = nowMs - ONE_MINUTE_MS;
+  let volume1mBuy = 0;
+  let volume1mSell = 0;
+  let count1m = 0;
+
+  for (const t of trades) {
+    if (t.timestamp < cutoff) break; // trades are newest-first; once past cutoff, done
+    count1m++;
+    if (t.side === 'buy') {
+      volume1mBuy += t.size;
+    } else {
+      volume1mSell += t.size;
+    }
+  }
+
+  const totalSize = volume1mBuy + volume1mSell;
+  return {
+    volume1mBuy,
+    volume1mSell,
+    count1m,
+    avgSize1m: count1m > 0 ? totalSize / count1m : 0,
+  };
 }

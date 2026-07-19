@@ -2,6 +2,8 @@
 .panel {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
   background-color: var(--color-bg-surface);
   font-family: var(--font-mono);
   overflow: hidden;

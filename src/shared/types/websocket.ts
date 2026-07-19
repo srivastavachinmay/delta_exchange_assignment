@@ -132,14 +132,19 @@ export interface RawOrderBookMessage extends BaseInboundMessage {
 }
 
 /**
- * Raw trades message — array of recent executions.
- * Typed precisely in Phase 4.
+ * Raw trade message — single execution from the 'all_trades' channel.
+ * timestamp is in microseconds (divide by 1000 for ms).
+ * side is derived: buyer_role === 'taker' → 'buy', else 'sell'.
  */
-export interface RawTradesMessage extends BaseInboundMessage {
-  readonly type: 'trades';
-  readonly channel: 'trades';
+export interface RawTradeMessage extends BaseInboundMessage {
+  readonly type: 'all_trades';
+  readonly buyer_role: 'maker' | 'taker';
+  readonly price: string;
+  readonly product_id: number;
+  readonly seller_role: 'maker' | 'taker';
+  readonly size: number;
   readonly symbol: TradingSymbol;
-  readonly payload: Record<string, unknown>;
+  readonly timestamp: number;
 }
 
 export type InboundMessage =
@@ -148,4 +153,4 @@ export type InboundMessage =
   | ErrorMessage
   | RawTickerMessage
   | RawOrderBookMessage
-  | RawTradesMessage;
+  | RawTradeMessage;

@@ -1,0 +1,177 @@
+/* ── Panel ───────────────────────────────────────────────────────────── */
+.panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background-color: var(--color-bg-surface);
+  font-family: var(--font-mono);
+  overflow: hidden;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 36px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.headerTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  letter-spacing: -0.01em;
+}
+
+.liveBadge {
+  font-size: 9px;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  letter-spacing: 0.1em;
+  color: var(--color-bid);
+  border: 1px solid color-mix(in srgb, var(--color-bid) 50%, transparent);
+  padding: 1px 5px 1px 4px;
+  border-radius: 3px;
+}
+
+/* ── Stats bar ───────────────────────────────────────────────────────── */
+.statsBar {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+  background-color: rgba(255, 255, 255, 0.008);
+}
+
+.statCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.statCellRight {
+  align-items: flex-end;
+}
+
+.statLabel {
+  font-size: 9px;
+  font-family: var(--font-sans);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  user-select: none;
+}
+
+.statValue {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+}
+
+.statBuy {
+  color: var(--color-bid);
+}
+
+.statSell {
+  color: var(--color-ask);
+}
+
+/* ── Column header ───────────────────────────────────────────────────── */
+.colHeader {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  padding: 4px 10px;
+  font-size: 9px;
+  font-family: var(--font-sans);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--color-border-subtle);
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.colRight {
+  text-align: right;
+}
+
+/* ── Trade list ──────────────────────────────────────────────────────── */
+.list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+  overflow-anchor: none;
+}
+
+.list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.list::-webkit-scrollbar-thumb {
+  background-color: var(--color-border);
+  border-radius: 2px;
+}
+
+/* ── Trade row ───────────────────────────────────────────────────────── */
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  padding: 0 10px;
+  line-height: 20px;
+  font-size: 11.5px;
+  letter-spacing: -0.01em;
+  cursor: default;
+  border-left: 2px solid transparent;
+}
+
+.row:hover {
+  background-color: rgba(255, 255, 255, 0.025);
+}
+
+.rowBuy {
+  border-left-color: color-mix(in srgb, var(--color-bid) 60%, transparent);
+}
+
+.rowSell {
+  border-left-color: color-mix(in srgb, var(--color-ask) 60%, transparent);
+}
+
+.rowLarge {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.time {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.buyPrice {
+  color: var(--color-bid);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.sellPrice {
+  color: var(--color-ask);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.size {
+  color: var(--color-text-secondary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

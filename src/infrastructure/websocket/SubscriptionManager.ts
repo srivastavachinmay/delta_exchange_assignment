@@ -6,7 +6,7 @@ import { logger } from '@/shared/utils/DevelopmentLogger';
 const PROTOCOL_CHANNEL: Readonly<Partial<Record<Channel, string>>> = {
   ticker: 'v2/ticker',
   orderbook: 'l2_orderbook',
-  trades: 'v2/trades',
+  trades: 'all_trades',
 };
 
 export interface SubscriptionManagerCallbacks {

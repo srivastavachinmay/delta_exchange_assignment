@@ -12,7 +12,7 @@ export type {
   ErrorMessage,
   RawTickerMessage,
   RawOrderBookMessage,
-  RawTradesMessage,
+  RawTradeMessage,
 } from './websocket';
 
 export type { ConnectionStatus, ConnectionState, ConnectionStatusCallbacks } from './connection';

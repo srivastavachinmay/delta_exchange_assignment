@@ -1,7 +1,7 @@
 .shell {
   display: grid;
   grid-template-rows: 36px 48px 1fr;
-  grid-template-columns: 1fr 340px;
+  grid-template-columns: 3fr 2fr;
   grid-template-areas:
     'status  status'
     'ticker  ticker'
@@ -26,5 +26,5 @@
 
 .statusArea  { grid-area: status; }
 .tickerArea  { grid-area: ticker; }
-.bookArea    { grid-area: book; }
-.tradesArea  { grid-area: trades; }
+.bookArea    { grid-area: book;   display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.tradesArea  { grid-area: trades; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
