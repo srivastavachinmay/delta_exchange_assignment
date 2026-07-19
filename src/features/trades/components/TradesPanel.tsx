@@ -1,5 +1,6 @@
 import type { TradingSymbol } from '@/shared/types';
 import { getSymbolConfig } from '@/shared/constants/symbols';
+import { LARGE_TRADE_THRESHOLDS } from '../config';
 import { TradesStatsBar } from './TradesStatsBar';
 import { TradeList } from './TradeList';
 import styles from '../trades.module.css';
@@ -7,8 +8,6 @@ import styles from '../trades.module.css';
 interface Props {
   readonly symbol: TradingSymbol;
 }
-
-const LARGE_TRADE_VALUE_USD = 10_000;
 
 export function TradesPanel({ symbol }: Props) {
   const config = getSymbolConfig(symbol);
@@ -29,7 +28,7 @@ export function TradesPanel({ symbol }: Props) {
       <TradeList
         symbol={symbol}
         precision={config.displayPrecision}
-        largeTradeValue={LARGE_TRADE_VALUE_USD}
+        largeTradeValue={LARGE_TRADE_THRESHOLDS[symbol]}
       />
     </div>
   );
