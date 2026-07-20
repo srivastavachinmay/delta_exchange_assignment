@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import type { TradingSymbol } from '@/shared/types';
+import { useShallow } from 'zustand/react/shallow';
 import { useOrderBookViewStore } from '@/app/stores/orderBookViewStore';
 import { formatOrderBookPrice } from '../orderBookFormatters';
 import styles from '../orderBook.module.css';
@@ -10,7 +11,7 @@ interface Props {
 }
 
 export const SpreadBar = memo(function SpreadBar({ symbol, precision }: Props) {
-  const spread = useOrderBookViewStore((s) => s.viewModels.get(symbol)?.spread ?? null);
+  const spread = useOrderBookViewStore(useShallow((s) => s.viewModels.get(symbol)?.spread ?? null));
 
   if (!spread) {
     return (

@@ -1,5 +1,7 @@
 import { memo } from 'react';
+import { useStoreWithEqualityFn } from 'zustand/traditional';
 import type { TradingSymbol } from '@/shared/types';
+import type { DepthLevel } from '@/domain/calculations/Depth';
 import { useOrderBookViewStore } from '@/app/stores/orderBookViewStore';
 import { OrderBookRow } from './OrderBookRow';
 import styles from '../orderBook.module.css';
@@ -12,7 +14,7 @@ interface Props {
 
 export const AskList = memo(function AskList({ symbol, precision, baseAsset }: Props) {
   // asks are stored in display order (highest price first, best ask last) — no reversal needed.
-  const asks = useOrderBookViewStore((s) => s.viewModels.get(symbol)?.asks ?? EMPTY);
+  const asks = useStoreWithEqualityFn(useOrderBookViewStore, (s) => s.viewModels.get(symbol)?.asks ?? EMPTY, levelsEqual);
 
   return (
     <div className={styles.section}>
@@ -38,4 +40,14 @@ export const AskList = memo(function AskList({ symbol, precision, baseAsset }: P
   );
 });
 
-const EMPTY = [] as const;
+const EMPTY: readonly DepthLevel[] = [];
+
+function levelsEqual(a: readonly DepthLevel[], b: readonly DepthLevel[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const la = a[i]!, lb = b[i]!;
+    if (la.price !== lb.price || la.size !== lb.size || la.cumulativeSize !== lb.cumulativeSize || la.depthPercent !== lb.depthPercent) return false;
+  }
+  return true;
+}

@@ -1,5 +1,7 @@
 import { memo } from 'react';
+import { useStoreWithEqualityFn } from 'zustand/traditional';
 import type { TradingSymbol } from '@/shared/types';
+import type { DepthLevel } from '@/domain/calculations/Depth';
 import { useOrderBookViewStore } from '@/app/stores/orderBookViewStore';
 import { OrderBookRow } from './OrderBookRow';
 import styles from '../orderBook.module.css';
@@ -11,7 +13,7 @@ interface Props {
 }
 
 export const BidList = memo(function BidList({ symbol, precision, baseAsset }: Props) {
-  const bids = useOrderBookViewStore((s) => s.viewModels.get(symbol)?.bids ?? EMPTY);
+  const bids = useStoreWithEqualityFn(useOrderBookViewStore, (s) => s.viewModels.get(symbol)?.bids ?? EMPTY, levelsEqual);
 
   // bids are sorted descending (best bid first = highest price = smallest cumulative).
   // Display as-is: best bid at top, closest to SpreadBar.
@@ -39,4 +41,14 @@ export const BidList = memo(function BidList({ symbol, precision, baseAsset }: P
   );
 });
 
-const EMPTY = [] as const;
+const EMPTY: readonly DepthLevel[] = [];
+
+function levelsEqual(a: readonly DepthLevel[], b: readonly DepthLevel[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const la = a[i]!, lb = b[i]!;
+    if (la.price !== lb.price || la.size !== lb.size || la.cumulativeSize !== lb.cumulativeSize || la.depthPercent !== lb.depthPercent) return false;
+  }
+  return true;
+}
