@@ -11,6 +11,12 @@ interface Props {
   readonly side: 'bid' | 'ask';
 }
 
+// toLocaleString() creates a new Intl resolver on every call; this avoids that.
+const sizeFormatter = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 3,
+});
+
 export const OrderBookRow = memo(function OrderBookRow({
   price,
   size,
@@ -20,8 +26,8 @@ export const OrderBookRow = memo(function OrderBookRow({
   side,
 }: Props) {
   const priceStr = formatOrderBookPrice(price, precision);
-  const sizeStr = formatSize(size);
-  const totalStr = formatSize(total);
+  const sizeStr = sizeFormatter.format(size);
+  const totalStr = sizeFormatter.format(total);
 
   // --depth drives the depth bar width via CSS; avoids a string allocation per render.
   const depthStyle = { '--depth': depthPercent } as React.CSSProperties;
@@ -46,7 +52,3 @@ export const OrderBookRow = memo(function OrderBookRow({
     </div>
   );
 });
-
-function formatSize(size: number): string {
-  return size.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
-}

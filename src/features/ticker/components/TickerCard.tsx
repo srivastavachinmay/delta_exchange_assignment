@@ -13,7 +13,6 @@ interface Props {
   readonly symbol: TradingSymbol;
 }
 
-// Leaf for price data — re-renders only when this symbol's ticker changes.
 const TickerCardData = memo(function TickerCardData({
   symbol,
   precision,
@@ -31,7 +30,6 @@ const TickerCardData = memo(function TickerCardData({
   );
 });
 
-// Layout container + focus state — re-renders only when this symbol's focus changes.
 export const TickerCard = memo(function TickerCard({ symbol }: Props) {
   const isFocused = useFocusedSymbolStore((s) => s.focusedSymbol === symbol);
   const setFocusedSymbol = useFocusedSymbolStore((s) => s.setFocusedSymbol);

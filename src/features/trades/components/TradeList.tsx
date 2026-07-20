@@ -1,4 +1,4 @@
-import { memo, useRef, useEffect, useMemo } from 'react';
+import { memo, useRef, useEffect } from 'react';
 import type { TradingSymbol } from '@/shared/types';
 import { useTradeStore } from '@/app/stores/tradeStore';
 import { TradeRow } from './TradeRow';
@@ -16,21 +16,18 @@ const AT_BOTTOM_THRESHOLD_PX = 40;
 export const TradeList = memo(function TradeList({ symbol, precision, largeTradeValue }: Props) {
   const trades = useTradeStore((s) => s.snapshots.get(symbol)?.trades ?? EMPTY);
   const scrollRef = useRef<HTMLDivElement>(null);
-  // true when the user has scrolled up away from the bottom
   const isPaused = useRef(false);
-  // true while a user gesture is active — lets us ignore programmatic scroll events
   const isUserGesture = useRef(false);
 
-  const displayTrades = useMemo(() => trades.slice().reverse(), [trades]);
+  // trades is newest-first from the engine; display oldest-first for scroll-to-bottom UX.
+  const displayTrades = trades.slice().reverse();
 
-  // Auto-scroll when new trades arrive, but only when not paused by the user.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || isPaused.current) return;
     el.scrollTop = el.scrollHeight;
   }, [displayTrades]);
 
-  // Track user gesture start so we can ignore the scroll events we trigger ourselves.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;

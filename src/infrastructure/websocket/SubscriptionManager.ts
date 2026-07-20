@@ -2,7 +2,6 @@ import type { Channel, TradingSymbol, OutboundMessage } from '@/shared/types';
 import type { WebSocketManager } from './WebSocketManager';
 import { logger } from '@/shared/utils/DevelopmentLogger';
 
-// Internal Channel names → wire protocol names used by Delta Exchange.
 const PROTOCOL_CHANNEL: Readonly<Partial<Record<Channel, string>>> = {
   ticker: 'v2/ticker',
   orderbook: 'l2_orderbook',

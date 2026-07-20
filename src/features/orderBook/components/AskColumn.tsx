@@ -13,7 +13,6 @@ interface Props {
 }
 
 export const AskList = memo(function AskList({ symbol, precision, baseAsset }: Props) {
-  // asks are stored in display order (highest price first, best ask last) — no reversal needed.
   const asks = useStoreWithEqualityFn(useOrderBookViewStore, (s) => s.viewModels.get(symbol)?.asks ?? EMPTY, levelsEqual);
 
   return (

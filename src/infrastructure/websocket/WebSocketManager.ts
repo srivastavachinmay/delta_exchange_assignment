@@ -34,11 +34,9 @@ export class WebSocketManager {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   private readonly listeners = new Set<RawMessageListener>();
-  // SubscriptionManager registers here to replay desired subscriptions on every open.
   private readonly readyListeners = new Set<ReadyListener>();
   // Suppresses reconnect when close is caller-initiated.
   private intentionalDisconnect = false;
-  // Wired by the composition root — keeps Infrastructure free of app/stores imports.
   private statusCallbacks: ConnectionStatusCallbacks | null = null;
 
   setStatusCallbacks(callbacks: ConnectionStatusCallbacks): void {
@@ -64,7 +62,6 @@ export class WebSocketManager {
     this.statusCallbacks?.onStatus('disconnected');
   }
 
-  // Drops with a dev warning if the socket is not open — callers need no guard.
   send(message: OutboundMessage): void {
     if (this.socket?.readyState !== WebSocket.OPEN) {
       const state = this.socket ? readyStateLabel(this.socket.readyState) : 'no socket';

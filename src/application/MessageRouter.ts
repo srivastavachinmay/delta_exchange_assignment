@@ -6,7 +6,6 @@ import { logger } from '@/shared/utils/DevelopmentLogger';
 
 export type ChannelMessageHandler = ChannelHandler;
 
-// Wire channel names from Delta Exchange → internal Channel names.
 const WIRE_TO_CHANNEL: Readonly<Partial<Record<string, Channel>>> = {
   'v2/ticker': 'ticker',
   l2_orderbook: 'orderbook',
@@ -64,13 +63,11 @@ export class MessageRouter implements MessageRouterPort {
 
     if (logger.verbose) logger.incomingMessage(wireChannel, extractSymbol(message));
 
-    // Market data → queue for frame-aligned batched processing
     if (this.marketDataQueue && MARKET_DATA_CHANNELS.has(channel)) {
       this.marketDataQueue.enqueue(message);
       return;
     }
 
-    // Control messages (subscription, connection) → immediate dispatch
     const handlers = this.handlers.get(channel);
     if (!handlers || handlers.size === 0) {
       logger.noHandlersForChannel(channel);

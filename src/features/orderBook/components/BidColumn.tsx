@@ -15,8 +15,6 @@ interface Props {
 export const BidList = memo(function BidList({ symbol, precision, baseAsset }: Props) {
   const bids = useStoreWithEqualityFn(useOrderBookViewStore, (s) => s.viewModels.get(symbol)?.bids ?? EMPTY, levelsEqual);
 
-  // bids are sorted descending (best bid first = highest price = smallest cumulative).
-  // Display as-is: best bid at top, closest to SpreadBar.
   return (
     <div className={styles.section}>
       <div className={styles.colHeader}>

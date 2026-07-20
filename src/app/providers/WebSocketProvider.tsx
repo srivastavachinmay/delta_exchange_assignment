@@ -30,13 +30,10 @@ interface Props {
 }
 
 // Sized to hold ~2 frames of peak traffic across all channels with headroom.
-// At 200 msg/sec × 16.7ms × 6 symbols ≈ 20 ticker messages per frame.
-// 256 accommodates future orderbook + trades channels without overflow.
 const QUEUE_CAPACITY = 256;
 
 export function WebSocketProvider({ children }: Props) {
   useEffect(() => {
-    // --- Application layer ---
     const subscriptionHandler = new SubscriptionHandler({
       onAcknowledge: (symbols, channels) =>
         useSubscriptionStore.getState().acknowledge(symbols, channels),
@@ -44,9 +41,7 @@ export function WebSocketProvider({ children }: Props) {
         useSubscriptionStore.getState().remove(symbols, channels),
     });
 
-    // --- Pipeline: queue → batchprocessor → scheduler ---
-    const queue = new MessageQueue<InboundMessage>(QUEUE_CAPACITY);
-    const batchProcessor = new BatchProcessor();
+    const queue = new MessageQueue<InboundMessage>(QUEUE_CAPACITY);    const batchProcessor = new BatchProcessor();
     const rafScheduler = new RAFScheduler();
     const tickerPublisher = new TickerPublisher();
     const orderBookPublisher = new OrderBookPublisher();
@@ -56,7 +51,6 @@ export function WebSocketProvider({ children }: Props) {
     // Control messages (subscription, connection) still dispatch immediately.
     const router = new MessageRouter(subscriptionHandler, queue);
 
-    // --- Infrastructure layer ---
     const storageAdapter = new LocalStorageAdapter();
 
     subscriptionManager.setCallbacks({
@@ -69,14 +63,10 @@ export function WebSocketProvider({ children }: Props) {
     const adapter = new WebSocketAdapter(router, wsManager, subscriptionManager);
     adapter.initialize();
 
-    // --- Domain engines ---
     const tickerEngine = new TickerEngine();
     const orderBookEngine = new OrderBookEngine();
     const tradeEngine = new TradeEngine();
 
-    // RAF frame callback: drain → batch → process → TickerPublisher → store.
-    // TickerPublisher throttles store writes to the display interval so React
-    // renders at a human-readable rate while every message is still processed.
     const unschedule = rafScheduler.schedule((timestamp) => {
       const messages = queue.drain();
 
@@ -85,7 +75,6 @@ export function WebSocketProvider({ children }: Props) {
 
         for (const batch of batches) {
           if (batch.channel === 'ticker') {
-            // last-wins: only the final message in the batch is meaningful.
             const lastMsg = batch.messages[batch.messages.length - 1] as RawTickerMessage;
             try {
               const ticker = tickerEngine.process(lastMsg);
@@ -130,7 +119,6 @@ export function WebSocketProvider({ children }: Props) {
         }
       }
 
-      // Always attempt flush — ensures pending data drains even if traffic pauses.
       tickerPublisher.tryFlush(timestamp, (tickers) => {
         useTickerStore.getState().upsertMany(tickers);
       });
@@ -158,7 +146,6 @@ export function WebSocketProvider({ children }: Props) {
 
     rafScheduler.start();
 
-    // Rebuild view models immediately when grouping step changes — no new WS data needed.
     const unsubscribeGrouping = useGroupingStore.subscribe(
       (s) => s.steps,
       (newSteps, prevSteps) => {
@@ -173,7 +160,6 @@ export function WebSocketProvider({ children }: Props) {
       },
     );
 
-    // --- Focused symbol: restore from storage on mount, persist on change ---
     const focusUseCase = new FocusSymbolUseCase(
       storageAdapter,
       (symbol) => useFocusedSymbolStore.getState().setFocusedSymbol(symbol),
@@ -185,7 +171,6 @@ export function WebSocketProvider({ children }: Props) {
       (symbol) => storageAdapter.set(STORAGE_KEYS.FOCUSED_SYMBOL, symbol),
     );
 
-    // --- Connection status callbacks ---
     wsManager.setStatusCallbacks({
       onStatus: (status) => useConnectionStore.getState().setStatus(status),
       onConnected: (connectedAt) => useConnectionStore.getState().setConnected(connectedAt),
@@ -193,7 +178,6 @@ export function WebSocketProvider({ children }: Props) {
       onError: (message) => useConnectionStore.getState().setError(message),
     });
 
-    // SubscriptionManager tracks desired set and replays on every reconnect.
     wsManager.connect();
 
     return () => {

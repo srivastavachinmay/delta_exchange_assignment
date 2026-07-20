@@ -22,9 +22,7 @@ export class TradeEngine {
       timestamp: Math.floor(message.timestamp / 1000),
     };
 
-    // Mutate in place (newest-first) — avoids per-message array allocation.
-    // O(n) unshift is acceptable: n ≤ MAX_TRADES (100). Snapshot produces
-    // an immutable copy so callers never observe internal mutations.
+    // newest-first — snapshot() produces an immutable copy so callers never observe internal mutations
     const trades = this.state.get(message.symbol);
     if (!trades) {
       this.state.set(message.symbol, [trade]);
@@ -54,13 +52,13 @@ export class TradeEngine {
 }
 
 function computeStats(trades: readonly Trade[], nowMs: number): TradeStats {
-  const cutoff = nowMs - ONE_MINUTE_MS;
+  const cutoffSec = Math.floor(nowMs / 1000) - 60; // trade.timestamp is in seconds
   let volume1mBuy = 0;
   let volume1mSell = 0;
   let count1m = 0;
 
   for (const t of trades) {
-    if (t.timestamp < cutoff) break; // trades are newest-first; once past cutoff, done
+    if (t.timestamp < cutoffSec) break; // trades are newest-first; once past cutoff, done
     count1m++;
     if (t.side === 'buy') {
       volume1mBuy += t.size;
