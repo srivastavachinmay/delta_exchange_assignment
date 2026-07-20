@@ -20,7 +20,6 @@ import type { InboundMessage, RawTickerMessage, RawOrderBookMessage, RawTradeMes
 import { useConnectionStore } from '@/app/stores/connectionStore';
 import { useSubscriptionStore } from '@/app/stores/subscriptionStore';
 import { useTickerStore } from '@/app/stores/tickerStore';
-import { useOrderBookStore } from '@/app/stores/orderBookStore';
 import { useOrderBookViewStore } from '@/app/stores/orderBookViewStore';
 import { useGroupingStore } from '@/app/stores/groupingStore';
 import { useTradeStore } from '@/app/stores/tradeStore';
@@ -207,7 +206,6 @@ export function WebSocketProvider({ children }: Props) {
       useConnectionStore.getState().reset();
       useSubscriptionStore.getState().reset();
       useTickerStore.getState().reset();
-      useOrderBookStore.getState().reset();
       useOrderBookViewStore.getState().reset();
       useGroupingStore.getState().reset();
       useTradeStore.getState().reset();

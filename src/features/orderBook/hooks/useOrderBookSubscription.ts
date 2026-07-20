@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { subscriptionManager } from '@/infrastructure/websocket/SubscriptionManager';
 import { useFocusedSymbolStore } from '@/app/stores/focusedSymbolStore';
-import { useOrderBookStore } from '@/app/stores/orderBookStore';
+import { useOrderBookViewStore } from '@/app/stores/orderBookViewStore';
 
 export function useOrderBookSubscription(): void {
   const focusedSymbol = useFocusedSymbolStore((s) => s.focusedSymbol);
@@ -10,7 +10,7 @@ export function useOrderBookSubscription(): void {
     subscriptionManager.subscribe('orderbook', focusedSymbol);
     return () => {
       subscriptionManager.unsubscribe('orderbook', focusedSymbol);
-      useOrderBookStore.getState().reset();
+      useOrderBookViewStore.getState().reset();
     };
   }, [focusedSymbol]);
 }
