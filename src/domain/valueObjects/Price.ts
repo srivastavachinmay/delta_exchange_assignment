@@ -14,9 +14,6 @@ declare const __priceBrand: unique symbol;
 
 export type Price = number & { readonly [__priceBrand]: 'Price' };
 
-/**
- * Phase 2: add range validation against symbol's min/max tick.
- */
 export function createPrice(value: number): Price {
   if (!Number.isFinite(value) || value < 0) {
     throw new RangeError(`Invalid price: ${value}`);

@@ -23,17 +23,19 @@ export const BidList = memo(function BidList({ symbol, precision, baseAsset }: P
         <span className={styles.colHeaderRight}>Total ({baseAsset})</span>
       </div>
       <div className={`${styles.rows} ${styles.rowsBid}`}>
-        {bids.map((level) => (
-          <OrderBookRow
-            key={level.price}
-            price={level.price}
-            size={level.size}
-            total={level.cumulativeSize}
-            depthPercent={level.depthPercent}
-            precision={precision}
-            side="bid"
-          />
-        ))}
+        {bids.length === 0
+          ? <div className={styles.bookEmptyState}>Waiting for order book…</div>
+          : bids.map((level) => (
+            <OrderBookRow
+              key={level.price}
+              price={level.price}
+              size={level.size}
+              total={level.cumulativeSize}
+              depthPercent={level.depthPercent}
+              precision={precision}
+              side="bid"
+            />
+          ))}
       </div>
     </div>
   );

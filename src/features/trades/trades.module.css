@@ -125,6 +125,42 @@
   border-radius: 2px;
 }
 
+/* ── Empty state ─────────────────────────────────────────────────────── */
+.emptyState {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-disabled);
+  font-family: var(--font-sans);
+  font-size: 12px;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────── */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  width: 100%;
+  background-color: color-mix(in srgb, var(--color-bg-elevated) 92%, var(--color-bid) 8%);
+  border: none;
+  border-top: 1px solid color-mix(in srgb, var(--color-bid) 35%, transparent);
+  color: var(--color-bid);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+  transition: background-color 150ms ease;
+}
+
+.footer:hover {
+  background-color: color-mix(in srgb, var(--color-bg-elevated) 80%, var(--color-bid) 20%);
+}
+
 /* ── Trade row ───────────────────────────────────────────────────────── */
 @keyframes tradeFlash {
   from { background-color: rgba(255, 255, 255, 0.12); }

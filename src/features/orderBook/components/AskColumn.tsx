@@ -23,17 +23,19 @@ export const AskList = memo(function AskList({ symbol, precision, baseAsset }: P
         <span className={styles.colHeaderRight}>Price (USD)</span>
       </div>
       <div className={`${styles.rows} ${styles.rowsAsk}`}>
-        {asks.map((level) => (
-          <OrderBookRow
-            key={level.price}
-            price={level.price}
-            size={level.size}
-            total={level.cumulativeSize}
-            depthPercent={level.depthPercent}
-            precision={precision}
-            side="ask"
-          />
-        ))}
+        {asks.length === 0
+          ? <div className={styles.bookEmptyState}>Waiting for order book…</div>
+          : asks.map((level) => (
+            <OrderBookRow
+              key={level.price}
+              price={level.price}
+              size={level.size}
+              total={level.cumulativeSize}
+              depthPercent={level.depthPercent}
+              precision={precision}
+              side="ask"
+            />
+          ))}
       </div>
     </div>
   );

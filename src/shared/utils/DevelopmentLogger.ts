@@ -11,8 +11,10 @@ class DevelopmentLogger {
     if (!isDev) return;
     const tag = `[WS:${category}]`;
     if (data !== undefined) {
+      // eslint-disable-next-line no-console
       console[level](tag, message, data);
     } else {
+      // eslint-disable-next-line no-console
       console[level](tag, message);
     }
   }

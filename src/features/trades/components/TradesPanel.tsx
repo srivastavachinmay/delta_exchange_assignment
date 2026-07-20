@@ -1,9 +1,11 @@
-import { memo } from 'react';
+import { memo, useState, useRef, useCallback } from 'react';
 import type { TradingSymbol } from '@/shared/types';
 import { getSymbolConfig } from '@/shared/constants/symbols';
 import { LARGE_TRADE_THRESHOLDS } from '../config';
 import { TradesStatsBar } from './TradesStatsBar';
 import { TradeList } from './TradeList';
+import type { TradeListHandle } from './TradeList';
+import { TradeFooter } from './TradeFooter';
 import styles from '../trades.module.css';
 
 interface Props {
@@ -13,6 +15,12 @@ interface Props {
 export const TradesPanel = memo(function TradesPanel({ symbol }: Props) {
   const config = getSymbolConfig(symbol);
   const baseAsset = symbol.replace('USD', '');
+  const [isScrollPaused, setIsScrollPaused] = useState(false);
+  const tradeListRef = useRef<TradeListHandle>(null);
+
+  const handleJumpToLatest = useCallback(() => {
+    tradeListRef.current?.scrollToLatest();
+  }, []);
 
   return (
     <div className={styles.panel}>
@@ -27,10 +35,13 @@ export const TradesPanel = memo(function TradesPanel({ symbol }: Props) {
         <span className={styles.colRight}>Size ({baseAsset})</span>
       </div>
       <TradeList
+        ref={tradeListRef}
         symbol={symbol}
         precision={config.displayPrecision}
         largeTradeValue={LARGE_TRADE_THRESHOLDS[symbol]}
+        onPausedChange={setIsScrollPaused}
       />
+      <TradeFooter isVisible={isScrollPaused} onJumpToLatest={handleJumpToLatest} />
     </div>
   );
 });

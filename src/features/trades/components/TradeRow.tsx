@@ -10,7 +10,7 @@ interface Props {
 }
 
 function handleAnimationEnd(e: React.AnimationEvent<HTMLDivElement>): void {
-  e.currentTarget.classList.remove(styles.rowFlash);
+  e.currentTarget.classList.remove(styles.rowFlash ?? '');
 }
 
 export const TradeRow = memo(function TradeRow({ trade, precision, largeTradeValue }: Props) {

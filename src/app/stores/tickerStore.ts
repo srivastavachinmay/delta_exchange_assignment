@@ -12,10 +12,8 @@
  * changes on every update, but the individual entry reference only changes
  * when that specific symbol is updated.
  *
- * Written by: TickerHandler (Phase 2, application layer).
- * Read by: TickerStrip and ticker panel components.
- *
- * Phase 2: add upsert() action and implement Ticker entity type.
+ * Written by: TickerPublisher (application layer).
+ * Read by: TickerBar and ticker components.
  */
 
 import { create } from 'zustand';

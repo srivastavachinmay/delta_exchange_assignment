@@ -220,8 +220,18 @@
   border-color: var(--color-bid);
 }
 
-/* ── Spread bar ──────────────────────────────────────────────────────── */
-.spreadBar {
+/* ── Empty state ─────────────────────────────────────────────────────── */
+.bookEmptyState {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-disabled);
+  font-family: var(--font-sans);
+  font-size: 12px;
+}
+
+/* ── Spread bar ──────────────────────────────────────────────────────── */.spreadBar {
   display: flex;
   align-items: center;
   justify-content: space-around;

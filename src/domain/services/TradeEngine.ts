@@ -3,7 +3,7 @@ import type { Trade, TradeStats, TradeSnapshot } from '../entities/Trade';
 import { createPrice } from '../valueObjects/Price';
 
 export const MAX_TRADES = 100;
-const ONE_MINUTE_MS = 60_000;
+const ONE_MINUTE_SEC = 60;
 
 export class TradeEngine {
   private readonly state = new Map<TradingSymbol, Trade[]>();
@@ -52,7 +52,7 @@ export class TradeEngine {
 }
 
 function computeStats(trades: readonly Trade[], nowMs: number): TradeStats {
-  const cutoffSec = Math.floor(nowMs / 1000) - 60; // trade.timestamp is in seconds
+  const cutoffSec = Math.floor(nowMs / 1000) - ONE_MINUTE_SEC; // trade.timestamp is in seconds
   let volume1mBuy = 0;
   let volume1mSell = 0;
   let count1m = 0;

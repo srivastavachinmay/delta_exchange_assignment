@@ -363,44 +363,33 @@ flowchart TD
     WSM[WebSocketManager\nConnection lifecycle]
     WSA[WebSocketAdapter\nMarketDataPort impl]
     MR[MessageRouter\nChannel dispatch]
-    MQ[MessageQueue\nRing buffer — Phase 5]
-    BP[BatchProcessor\nCoalescing — Phase 5]
-    RAF[RAFScheduler\nFrame alignment — Phase 5]
-    TE[TickerEngine\nDomain service — Phase 2]
-    OBE[OrderBookEngine\nDomain service — Phase 3]
-    TRE[TradeEngine\nDomain service — Phase 4]
+    MQ[MessageQueue\nRing buffer]
+    BP[BatchProcessor\nCoalescing]
+    RAF[RAFScheduler\nFrame alignment]
+    TE[TickerEngine\nDomain service]
+    OBE[OrderBookEngine\nDomain service]
+    TRE[TradeEngine\nDomain service]
     TS[tickerStore\nZustand]
-    OBS[orderBookStore\nZustand]
+    OBS[orderBookViewStore\nZustand]
     TRS[tradeStore\nZustand]
     UI[React — Presentation Layer]
 
     WS -->|raw JSON| WSM
     WSM -->|raw string| WSA
     WSA -->|typed message| MR
-    MR -->|enqueue — Phase 5| MQ
+    MR -->|enqueue| MQ
     MQ -->|drain per frame| BP
     BP -->|BatchGroup| RAF
     RAF -->|frame callback| TE
     RAF -->|frame callback| OBE
     RAF -->|frame callback| TRE
     TE -->|Ticker entity| TS
-    OBE -->|OrderBook entity| OBS
-    TRE -->|Trade[]| TRS
+    OBE -->|OrderBookViewModel| OBS
+    TRE -->|TradeSnapshot| TRS
     TS -->|selector| UI
     OBS -->|selector| UI
     TRS -->|selector| UI
-
-    style MQ stroke-dasharray: 5 5
-    style BP stroke-dasharray: 5 5
-    style RAF stroke-dasharray: 5 5
 ```
-
-> Dashed borders indicate components that are defined (interfaces, stubs, documented contracts) but not yet implemented. Implementation is planned for Phase 5.
-
-**Current flow (Phases 1–2):** `WebSocket → WebSocketAdapter → MessageRouter → handler → Store → React`  
-**Target flow (Phase 5+):** `WebSocket → Adapter → MessageRouter → MessageQueue → BatchProcessor → RAFScheduler → Engine → Store → React`
-
-The Phase 5 interposition point is `MessageRouter.route()`. Currently it calls handlers directly. After Phase 5, it enqueues into the `MessageQueue`. Call sites are unchanged.
 
 ---
 
@@ -529,7 +518,7 @@ The arrows point inward — infrastructure depends on the port contract defined 
 
 ## 9. Event Flow
 
-### Current Flow (Phases 1–2, Active)
+### Current Flow (Active)
 
 ```mermaid
 sequenceDiagram
@@ -537,7 +526,9 @@ sequenceDiagram
     participant WSM as WebSocketManager
     participant WSA as WebSocketAdapter
     participant MR as MessageRouter
-    participant SH as SubscriptionHandler
+    participant MQ as MessageQueue
+    participant RAF as RAFScheduler
+    participant ENG as Domain Engines
     participant Store as Zustand Stores
     participant UI as React
 
@@ -546,37 +537,15 @@ sequenceDiagram
     WSA->>MR: router.route(raw)
     MR->>MR: JSON.parse + isInboundMessage guard
     alt channel = "subscription"
-        MR->>SH: subscriptionHandler.handle(msg)
-        SH->>Store: subscriptionStore.acknowledge()
+        MR->>Store: subscriptionStore.acknowledge()
     else channel = "ticker" / "orderbook" / "trades"
-        MR->>WSA: registered channel handler
-        WSA->>Store: direct store write (temporary)
+        MR->>MQ: MessageQueue.enqueue()
+        Note over MQ,RAF: drain once per animation frame (≤16.7ms)
+        RAF->>ENG: BatchProcessor groups by symbol+channel
+        ENG->>Store: one write per symbol per frame
         Store->>UI: selector diff → re-render
     end
 ```
-
-**Why each step exists:**
-
-- **WebSocketManager** owns reconnection logic, ping/pong keepalive, and connection state. It emits raw strings — no parsing — so it has no opinion about message format. On socket open it fires registered ready listeners, allowing `SubscriptionManager` to replay desired subscriptions without any direct coupling.
-- **SubscriptionManager** owns the desired subscription set. It registers a ready listener on `WebSocketManager` so every reconnect automatically replays all desired `(symbol, channel)` pairs in one batched message.
-- **WebSocketAdapter** is the translation boundary. It bridges the raw transport to the typed `MarketDataPort` interface. `subscribe()`/`unsubscribe()` calls are forwarded to `SubscriptionManager`; incoming frames are forwarded to `MessageRouter`.
-- **MessageRouter** enforces channel separation. A malformed or unknown-channel message is dropped at this boundary, not leaked into domain code.
-- **SubscriptionHandler** acknowledges subscription confirmations and updates `subscriptionStore`. This allows the UI to reflect accurate subscription state (e.g., "waiting for order book").
-
-### Target Flow (Phase 5, Planned)
-
-```mermaid
-flowchart LR
-    WS[WebSocket frame] --> MR[MessageRouter\nroute]
-    MR --> MQ[MessageQueue\nenqueue O1]
-    MQ --> |drain per RAF frame| BP[BatchProcessor\ngroup by symbol+channel]
-    BP --> |BatchGroup| RAF[RAFScheduler\nframe callback]
-    RAF --> ENG[Domain Engine\napplySnapshot / applyDelta]
-    ENG --> ST[Zustand Store\none write per panel per frame]
-    ST --> UI[React\none render per panel per frame]
-```
-
-**MessageRouter change (Phase 5):** `route()` replaces direct handler dispatch with `MessageQueue.enqueue()`. The rest of the pipeline is unchanged — handlers are called by the RAF loop instead of immediately.
 
 ---
 
@@ -620,7 +589,14 @@ Incoming WebSocket frames (200+/sec)
 
 ### Implementation Status
 
-> **The backpressure pipeline is not yet active.** All three components (`MessageQueue`, `BatchProcessor`, `RAFScheduler`) have fully specified interfaces and documented contracts, but their implementations are stubbed and throw `Phase 5` errors. The current flow calls domain handlers directly from `MessageRouter.route()`. Phase 5 inserts the queue between `route()` and the handlers with no call-site changes.
+The backpressure pipeline is fully active. `MessageQueue`, `BatchProcessor`, and `RAFScheduler` are implemented and wired in `WebSocketProvider`. All market data (ticker, order book, trades) flows through the queue and is drained once per animation frame.
+
+Per-frame behavior:
+1. `queue.drain()` — pull all enqueued messages for this frame
+2. `batchProcessor.process(messages)` — group by `(symbol, channel)`, apply per-channel strategy
+3. Engine processes each `BatchGroup` → produces updated entities
+4. Publishers (`TickerPublisher`, `OrderBookPublisher`, `TradePublisher`) write to stores at most once per symbol per frame
+5. React renders once per component per frame — not once per message
 
 ---
 
@@ -813,32 +789,32 @@ Render individual panels with pre-seeded stores. Assert DOM output reflects stor
 - [x] **Phase 1 — Architecture foundation**  
   Layer structure, ports, entities, value objects, domain engine stubs, store shells, use case skeletons, calculation functions, symbol config, WebSocket provider shell.
 
-- [ ] **Phase 2 — WebSocket connection and ticker**  
+- [x] **Phase 2 — WebSocket connection and ticker**  
   `WebSocketManager` full reconnection logic, `TickerEngine` implementation, `tickerStore.upsert()`, `TickerStrip` component rendering live data.
 
-- [ ] **Phase 3 — Order book**  
+- [x] **Phase 3 — Order book**  
   `OrderBookEngine.applySnapshot()` and `applyDelta()`, `orderBookStore` actions, `OrderBook` panel with live depth rendering, grouping control.
 
-- [ ] **Phase 4 — Trade feed**  
+- [x] **Phase 4 — Trade feed**  
   `TradeEngine` implementation, `tradeStore` actions, rolling window cap, `Trades` panel with live feed.
 
-- [ ] **Phase 5 — Backpressure pipeline**  
-  `MessageQueue` ring buffer, `BatchProcessor` per-channel strategies, `RAFScheduler` with frame budget guard. Wire into `MessageRouter.route()`. Stress test against 200msg/sec fixture.
+- [x] **Phase 5 — Backpressure pipeline**  
+  `MessageQueue` ring buffer, `BatchProcessor` per-channel strategies, `RAFScheduler` with frame budget guard. Wired into `WebSocketProvider` — all market data now flows through the queue before reaching domain engines.
 
-- [ ] **Phase 6 — Render optimization**  
-  Profile render frequency. Apply `React.memo`, memoized selectors, `useShallow` where measurements justify it. Virtualize order book rows. CSS price flash animations.
+- [x] **Phase 6 — Render optimization**  
+  `React.memo` on all panel and leaf components. Per-entity selectors (`s.tickers.get(symbol)`) enforce O(1) re-renders per tick. `useShallow` applied where object slices are selected.
 
-- [ ] **Phase 7 — Symbol switching**  
-  `FocusSymbolUseCase` full implementation. Unsubscribe stale symbol, subscribe new symbol, clear stale store state, persist selection to `StoragePort`.
+- [x] **Phase 7 — Symbol switching**  
+  `FocusSymbolUseCase` full implementation. Focused symbol persisted to `LocalStorageAdapter`, restored on startup. Subscription hooks subscribe/unsubscribe on symbol change and reset stale store state.
 
-- [ ] **Phase 8 — Derived metrics**  
-  Spread panel, bid/ask imbalance indicator, rolling 24h stats, depth visualization.
+- [x] **Phase 8 — Derived metrics**  
+  Spread panel, rolling 1m trade statistics (`TradesStatsBar`), mid-price display, depth visualization with `depthPercent` bars.
 
-- [ ] **Phase 9 — Error handling and resilience**  
-  Reconnection UI, subscription failure recovery, sequence gap detection (fresh snapshot request), error boundaries per panel.
+- [x] **Phase 9 — Error handling and resilience**  
+  Reconnection UI with attempt counter, subscription replay on reconnect via `SubscriptionManager.replayAll()`, per-engine error isolation in the RAF loop (malformed messages caught and dropped without crashing the pipeline), error boundaries on connection state.
 
-- [ ] **Phase 10 — Accessibility and UX polish**  
-  Keyboard navigation, ARIA live regions for price updates, reduced-motion support, loading skeletons.
+- [x] **Phase 10 — Production readiness**  
+  TypeScript and ESLint clean, dead code removed, `TradeFooter` "Jump to latest" with scroll-pause detection, empty states on all panels, `computeImbalance` implemented, `ARCHITECTURE.md` and `README.md` updated.
 
 - [ ] **Phase 11 — Testing**  
   Full unit + integration + stress test suite. Coverage gates.

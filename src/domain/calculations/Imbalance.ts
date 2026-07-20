@@ -24,11 +24,23 @@ export interface ImbalanceResult {
  * Compute order book imbalance over the top `levels` price levels per side.
  * Returns null if the book is empty.
  *
- * TODO Phase 3: implement
  */
-export function computeImbalance(
-  _book: OrderBook,
-  _levels = 10,
-): ImbalanceResult | null {
-  throw new Error('computeImbalance() not implemented — Phase 3');
+
+export function computeImbalance(book: OrderBook, levels = 10): ImbalanceResult | null {
+  if (book.bids.length === 0 && book.asks.length === 0) return null;
+
+  let totalBidSize = 0;
+  let totalAskSize = 0;
+
+  const bidLevels = Math.min(levels, book.bids.length);
+  const askLevels = Math.min(levels, book.asks.length);
+  const levelsConsidered = Math.max(bidLevels, askLevels);
+
+  for (let i = 0; i < bidLevels; i++) totalBidSize += book.bids[i]![1];
+  for (let i = 0; i < askLevels; i++) totalAskSize += book.asks[i]![1];
+
+  const total = totalBidSize + totalAskSize;
+  const value = total === 0 ? 0 : (totalBidSize - totalAskSize) / total;
+
+  return { value, totalBidSize, totalAskSize, levelsConsidered };
 }
