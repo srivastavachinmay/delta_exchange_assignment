@@ -167,6 +167,7 @@
   z-index: -1;
   pointer-events: none;
   transition: width 80ms linear;
+  width: calc(var(--depth, 0) * 100%);
 }
 
 .depthBarBid {

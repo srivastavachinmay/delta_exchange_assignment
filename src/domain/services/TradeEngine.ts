@@ -22,19 +22,29 @@ export class TradeEngine {
       timestamp: Math.floor(message.timestamp / 1000),
     };
 
-    const existing = this.state.get(message.symbol) ?? [];
-    const updated = [trade, ...existing];
-    this.state.set(message.symbol, updated.length > MAX_TRADES ? updated.slice(0, MAX_TRADES) : updated);
+    // Mutate in place (newest-first) — avoids per-message array allocation.
+    // O(n) unshift is acceptable: n ≤ MAX_TRADES (100). Snapshot produces
+    // an immutable copy so callers never observe internal mutations.
+    const trades = this.state.get(message.symbol);
+    if (!trades) {
+      this.state.set(message.symbol, [trade]);
+      return;
+    }
+    if (trades.length >= MAX_TRADES) {
+      trades.length = MAX_TRADES - 1; // drop oldest (last element, newest-first order)
+    }
+    trades.unshift(trade);
   }
 
   snapshot(symbol: TradingSymbol, nowMs: number): TradeSnapshot | null {
     const trades = this.state.get(symbol);
     if (!trades) return null;
 
+    const snapshot = trades.slice(); // immutable copy — callers must not observe internal mutations
     return {
       symbol,
-      trades,
-      stats: computeStats(trades, nowMs),
+      trades: snapshot,
+      stats: computeStats(snapshot, nowMs),
     };
   }
 

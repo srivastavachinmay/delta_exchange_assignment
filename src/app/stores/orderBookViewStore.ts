@@ -9,6 +9,7 @@ interface OrderBookViewState {
 
 interface OrderBookViewActions {
   upsert(vm: OrderBookViewModel): void;
+  upsertMany(vms: readonly OrderBookViewModel[]): void;
   reset(): void;
 }
 
@@ -28,6 +29,21 @@ export const useOrderBookViewStore = create<OrderBookViewStore>()(
           },
           false,
           'orderBookView/upsert',
+        );
+      },
+
+      upsertMany(vms: readonly OrderBookViewModel[]) {
+        if (vms.length === 0) return;
+        set(
+          (prev) => {
+            const next = new Map(prev.viewModels);
+            for (const vm of vms) {
+              next.set(vm.symbol, vm);
+            }
+            return { viewModels: next as ReadonlyMap<TradingSymbol, OrderBookViewModel> };
+          },
+          false,
+          'orderBookView/upsertMany',
         );
       },
 

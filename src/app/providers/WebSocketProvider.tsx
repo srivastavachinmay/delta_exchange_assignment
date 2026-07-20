@@ -86,23 +86,18 @@ export function WebSocketProvider({ children }: Props) {
 
         for (const batch of batches) {
           if (batch.channel === 'ticker') {
-            let latestTicker = null;
-            for (const msg of batch.messages) {
-              const raw = msg as RawTickerMessage;
-              try {
-                const ticker = tickerEngine.process(raw);
-                const prev = latestTicker ?? useTickerStore.getState().tickers.get(raw.symbol);
-                if (tickerEngine.isValidUpdate(ticker, prev)) {
-                  latestTicker = ticker;
-                }
-              } catch (err) {
-                if (import.meta.env.DEV) {
-                  console.warn('[TickerEngine] malformed message dropped:', err);
-                }
+            // last-wins: only the final message in the batch is meaningful.
+            const lastMsg = batch.messages[batch.messages.length - 1] as RawTickerMessage;
+            try {
+              const ticker = tickerEngine.process(lastMsg);
+              const prev = useTickerStore.getState().tickers.get(lastMsg.symbol);
+              if (tickerEngine.isValidUpdate(ticker, prev)) {
+                tickerPublisher.update(ticker);
               }
-            }
-            if (latestTicker !== null) {
-              tickerPublisher.update(latestTicker);
+            } catch (err) {
+              if (import.meta.env.DEV) {
+                console.warn('[TickerEngine] malformed message dropped:', err);
+              }
             }
           }
 
@@ -141,22 +136,24 @@ export function WebSocketProvider({ children }: Props) {
         useTickerStore.getState().upsertMany(tickers);
       });
       orderBookPublisher.tryFlush(timestamp, (symbols) => {
+        const vms = [];
         for (const symbol of symbols) {
           const book = orderBookEngine.snapshot(symbol);
           if (!book) continue;
-          useOrderBookStore.getState().upsert(book);
           const step = useGroupingStore.getState().getStep(symbol);
-          const vm = orderBookPublisher.transform(book, step);
-          useOrderBookViewStore.getState().upsert(vm);
+          vms.push(orderBookPublisher.transform(book, step));
         }
+        if (vms.length > 0) useOrderBookViewStore.getState().upsertMany(vms);
       });
       tradePublisher.tryFlush(timestamp, (symbols) => {
         const nowMs = Date.now();
+        const snapshots = [];
         for (const symbol of symbols) {
           const snapshot = tradeEngine.snapshot(symbol, nowMs);
           if (!snapshot) continue;
-          useTradeStore.getState().upsert(snapshot);
+          snapshots.push(snapshot);
         }
+        if (snapshots.length > 0) useTradeStore.getState().upsertMany(snapshots);
       });
     });
 

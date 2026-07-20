@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { TradingSymbol } from '@/shared/types';
 import { getSymbolConfig } from '@/shared/constants/symbols';
 import { LARGE_TRADE_THRESHOLDS } from '../config';
@@ -9,7 +10,7 @@ interface Props {
   readonly symbol: TradingSymbol;
 }
 
-export function TradesPanel({ symbol }: Props) {
+export const TradesPanel = memo(function TradesPanel({ symbol }: Props) {
   const config = getSymbolConfig(symbol);
   const baseAsset = symbol.replace('USD', '');
 
@@ -32,4 +33,4 @@ export function TradesPanel({ symbol }: Props) {
       />
     </div>
   );
-}
+});

@@ -62,7 +62,7 @@ export class MessageRouter implements MessageRouterPort {
       return;
     }
 
-    logger.incomingMessage(wireChannel, extractSymbol(message));
+    if (logger.verbose) logger.incomingMessage(wireChannel, extractSymbol(message));
 
     // Market data → queue for frame-aligned batched processing
     if (this.marketDataQueue && MARKET_DATA_CHANNELS.has(channel)) {

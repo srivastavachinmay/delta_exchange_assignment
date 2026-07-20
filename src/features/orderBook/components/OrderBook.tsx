@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { TradingSymbol } from '@/shared/types';
 import { getSymbolConfig } from '@/shared/constants/symbols';
 import { AskList } from './AskColumn';
@@ -11,7 +12,7 @@ interface Props {
   readonly symbol: TradingSymbol;
 }
 
-export function OrderBook({ symbol }: Props) {
+export const OrderBook = memo(function OrderBook({ symbol }: Props) {
   const config = getSymbolConfig(symbol);
   const baseAsset = symbol.replace('USD', '');
 
@@ -28,4 +29,4 @@ export function OrderBook({ symbol }: Props) {
       <BidList symbol={symbol} precision={config.displayPrecision} baseAsset={baseAsset} />
     </div>
   );
-}
+});

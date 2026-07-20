@@ -8,24 +8,34 @@ export interface DepthLevel {
   readonly depthPercent: number;
 }
 
+interface MutableDepthLevel {
+  price: number;
+  size: number;
+  cumulativeSize: number;
+  depthPercent: number;
+}
+
 export function computeCumulativeDepth(
   levels: readonly PriceLevel[],
 ): readonly DepthLevel[] {
   if (levels.length === 0) return EMPTY;
 
   let cumulative = 0;
-  const withCumulative: DepthLevel[] = levels.map(([price, size]) => {
+  const result: MutableDepthLevel[] = new Array(levels.length);
+
+  for (let i = 0; i < levels.length; i++) {
+    const [price, size] = levels[i]!;
     cumulative += size;
-    return { price, size, cumulativeSize: cumulative, depthPercent: 0 };
-  });
+    result[i] = { price, size, cumulativeSize: cumulative, depthPercent: 0 };
+  }
 
-  const maxCumulative = cumulative;
-  if (maxCumulative === 0) return withCumulative;
+  if (cumulative > 0) {
+    for (let i = 0; i < result.length; i++) {
+      result[i]!.depthPercent = result[i]!.cumulativeSize / cumulative;
+    }
+  }
 
-  return withCumulative.map((level) => ({
-    ...level,
-    depthPercent: level.cumulativeSize / maxCumulative,
-  }));
+  return result;
 }
 
 const EMPTY: readonly DepthLevel[] = [];

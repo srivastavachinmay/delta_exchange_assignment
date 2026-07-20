@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo } from 'react';
 import type { TradingSymbol } from '@/shared/types';
 import { useOrderBookViewStore } from '@/app/stores/orderBookViewStore';
 import { OrderBookRow } from './OrderBookRow';
@@ -11,11 +11,8 @@ interface Props {
 }
 
 export const AskList = memo(function AskList({ symbol, precision, baseAsset }: Props) {
+  // asks are stored in display order (highest price first, best ask last) — no reversal needed.
   const asks = useOrderBookViewStore((s) => s.viewModels.get(symbol)?.asks ?? EMPTY);
-
-  // asks are sorted ascending (best ask = lowest price first, smallest cumulative first).
-  // Reverse for display: highest price at top, best ask at bottom adjacent to SpreadBar.
-  const displayAsks = useMemo(() => [...asks].reverse(), [asks]);
 
   return (
     <div className={styles.section}>
@@ -25,7 +22,7 @@ export const AskList = memo(function AskList({ symbol, precision, baseAsset }: P
         <span className={styles.colHeaderRight}>Price (USD)</span>
       </div>
       <div className={`${styles.rows} ${styles.rowsAsk}`}>
-        {displayAsks.map((level) => (
+        {asks.map((level) => (
           <OrderBookRow
             key={level.price}
             price={level.price}

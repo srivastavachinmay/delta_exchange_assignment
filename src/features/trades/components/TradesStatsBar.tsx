@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import type { TradingSymbol } from '@/shared/types';
 import { useTradeStore } from '@/app/stores/tradeStore';
+import { useShallow } from 'zustand/react/shallow';
 import { formatSize } from '../tradeFormatters';
 import styles from '../trades.module.css';
 
@@ -12,7 +13,9 @@ interface Props {
 const EMPTY_STATS = { volume1mBuy: 0, volume1mSell: 0, count1m: 0, avgSize1m: 0 };
 
 export const TradesStatsBar = memo(function TradesStatsBar({ symbol, baseAsset }: Props) {
-  const stats = useTradeStore((s) => s.snapshots.get(symbol)?.stats ?? EMPTY_STATS);
+  const stats = useTradeStore(
+    useShallow((s) => s.snapshots.get(symbol)?.stats ?? EMPTY_STATS),
+  );
 
   return (
     <div className={styles.statsBar}>
