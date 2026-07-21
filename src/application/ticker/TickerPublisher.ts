@@ -1,26 +1,33 @@
 import type { TradingSymbol } from '@/shared/types';
 import type { Ticker } from '@/domain/entities/Ticker';
 
-export const DEFAULT_PUBLISH_INTERVAL_MS = 150;
+export const DEFAULT_PUBLISH_INTERVAL_MS = 500;
 
 /**
  * Decouples domain processing rate from UI render rate.
  *
- * The RAF callback processes every ticker message and calls update() per symbol.
+ * update() is called for each incoming ticker after engine processing. It owns
+ * the staleness guard: if the new ticker's timestamp is not newer than the last
+ * accepted ticker for that symbol, the update is silently dropped. This keeps
+ * the guard responsibility inside the publisher rather than forcing callers to
+ * read from external stores to drive the decision.
+ *
  * tryFlush() is called every frame but only writes to the store once the display
  * interval has elapsed — keeping renders at a human-readable cadence (~6fps at
  * 150ms) while the pipeline processes data at full speed.
- *
- * tryFlush is called unconditionally each frame (even when no new messages
- * arrived) so accumulated tickers drain if traffic pauses mid-interval.
  */
 export class TickerPublisher {
   private readonly pending = new Map<TradingSymbol, Ticker>();
+  /** Tracks the timestamp of the last accepted (non-stale) ticker per symbol. */
+  private readonly lastAccepted = new Map<TradingSymbol, number>();
   private lastPublishAt = 0;
 
   constructor(private readonly intervalMs: number = DEFAULT_PUBLISH_INTERVAL_MS) {}
 
   update(ticker: Ticker): void {
+    const prevTimestamp = this.lastAccepted.get(ticker.symbol);
+    if (prevTimestamp !== undefined && ticker.timestamp <= prevTimestamp) return;
+    this.lastAccepted.set(ticker.symbol, ticker.timestamp);
     this.pending.set(ticker.symbol, ticker);
   }
 

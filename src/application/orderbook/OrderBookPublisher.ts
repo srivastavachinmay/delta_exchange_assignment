@@ -3,7 +3,7 @@ import type { OrderBook } from '@/domain/entities/OrderBook';
 import type { OrderBookViewModel } from '@/domain/entities/OrderBookViewModel';
 import { buildViewModel } from '@/domain/entities/OrderBookViewModel';
 
-export const DEFAULT_ORDERBOOK_PUBLISH_INTERVAL_MS = 100;
+export const DEFAULT_ORDERBOOK_PUBLISH_INTERVAL_MS = 500;
 
 export class OrderBookPublisher {
   private readonly dirty = new Set<TradingSymbol>();

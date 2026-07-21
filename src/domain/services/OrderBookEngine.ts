@@ -53,16 +53,11 @@ export class OrderBookEngine {
       symbol,
       bids: book.bids.slice(),
       asks: book.asks.slice(),
-      sequence: -1,
       timestamp: book.timestamp,
     };
   }
 
   clear(symbol: TradingSymbol): void {
     this.state.delete(symbol);
-  }
-
-  isValidSequence(current: OrderBook, nextSequence: number): boolean {
-    return nextSequence === current.sequence + 1;
   }
 }

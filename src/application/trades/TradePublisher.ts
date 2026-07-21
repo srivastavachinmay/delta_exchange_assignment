@@ -1,6 +1,6 @@
 import type { TradingSymbol } from '@/shared/types';
 
-export const DEFAULT_TRADE_PUBLISH_INTERVAL_MS = 100;
+export const DEFAULT_TRADE_PUBLISH_INTERVAL_MS = 500;
 
 export class TradePublisher {
   private readonly dirty = new Set<TradingSymbol>();

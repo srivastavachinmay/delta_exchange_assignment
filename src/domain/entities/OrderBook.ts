@@ -10,7 +10,8 @@
  * [price, size] tuples to avoid per-entry object allocation at high frequency.
  * This matters at 50 delta messages/sec × 20 levels = 1000 allocations/sec.
  *
- * sequence: monotonically increasing. Delta messages out of sequence are dropped.
+ * Delta Exchange sends full snapshots on every l2_orderbook message — no sequence
+ * number is present in the wire format and no incremental merging is required.
  */
 
 import type { TradingSymbol } from '@/shared/types';
@@ -21,13 +22,11 @@ export interface OrderBook {
   readonly symbol: TradingSymbol;
   readonly bids: readonly PriceLevel[];
   readonly asks: readonly PriceLevel[];
-  readonly sequence: number;
   readonly timestamp: number;
 }
 
 export const EMPTY_ORDER_BOOK: Omit<OrderBook, 'symbol'> = {
   bids: [],
   asks: [],
-  sequence: -1,
   timestamp: 0,
 };

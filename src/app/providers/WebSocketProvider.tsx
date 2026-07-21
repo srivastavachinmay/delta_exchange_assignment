@@ -10,13 +10,14 @@ import { BatchProcessor } from '@/application/scheduler/BatchProcessor';
 import { RAFScheduler } from '@/application/scheduler/RAFScheduler';
 import { TickerPublisher } from '@/application/ticker/TickerPublisher';
 import { OrderBookPublisher } from '@/application/orderbook/OrderBookPublisher';
+import { TradePublisher } from '@/application/trades/TradePublisher';
+import { MarketDataPipeline } from '@/application/MarketDataPipeline';
 import { FocusSymbolUseCase } from '@/application/useCases/FocusSymbolUseCase';
 import { TickerEngine } from '@/domain/services/TickerEngine';
 import { OrderBookEngine } from '@/domain/services/OrderBookEngine';
-import { STORAGE_KEYS } from '@/domain/ports/StoragePort';
-import { TradePublisher } from '@/application/trades/TradePublisher';
 import { TradeEngine } from '@/domain/services/TradeEngine';
-import type { InboundMessage, RawTickerMessage, RawOrderBookMessage, RawTradeMessage } from '@/shared/types';
+import { STORAGE_KEYS } from '@/domain/ports/StoragePort';
+import type { InboundMessage } from '@/shared/types';
 import { useConnectionStore } from '@/app/stores/connectionStore';
 import { useSubscriptionStore } from '@/app/stores/subscriptionStore';
 import { useTickerStore } from '@/app/stores/tickerStore';
@@ -32,6 +33,18 @@ interface Props {
 // Sized to hold ~2 frames of peak traffic across all channels with headroom.
 const QUEUE_CAPACITY = 256;
 
+/**
+ * WebSocketProvider — composition root for the realtime data pipeline.
+ *
+ * Responsibilities:
+ * - Instantiate all application and domain objects
+ * - Wire them together and inject dependencies
+ * - Start/stop the pipeline lifecycle
+ * - Subscribe to store changes that require pipeline reactions
+ *
+ * Per-frame orchestration logic lives in MarketDataPipeline (application layer),
+ * not here. This component is intentionally thin.
+ */
 export function WebSocketProvider({ children }: Props) {
   useEffect(() => {
     const subscriptionHandler = new SubscriptionHandler({
@@ -41,14 +54,13 @@ export function WebSocketProvider({ children }: Props) {
         useSubscriptionStore.getState().remove(symbols, channels),
     });
 
-    const queue = new MessageQueue<InboundMessage>(QUEUE_CAPACITY);    const batchProcessor = new BatchProcessor();
+    const queue = new MessageQueue<InboundMessage>(QUEUE_CAPACITY);
+    const batchProcessor = new BatchProcessor();
     const rafScheduler = new RAFScheduler();
     const tickerPublisher = new TickerPublisher();
     const orderBookPublisher = new OrderBookPublisher();
     const tradePublisher = new TradePublisher();
 
-    // Queue is injected so the router enqueues market data instead of dispatching directly.
-    // Control messages (subscription, connection) still dispatch immediately.
     const router = new MessageRouter(subscriptionHandler, queue);
 
     const storageAdapter = new LocalStorageAdapter();
@@ -67,85 +79,27 @@ export function WebSocketProvider({ children }: Props) {
     const orderBookEngine = new OrderBookEngine();
     const tradeEngine = new TradeEngine();
 
-    const unschedule = rafScheduler.schedule((timestamp) => {
-      const messages = queue.drain();
+    const pipeline = new MarketDataPipeline(
+      queue,
+      batchProcessor,
+      rafScheduler,
+      tickerEngine,
+      orderBookEngine,
+      tradeEngine,
+      tickerPublisher,
+      orderBookPublisher,
+      tradePublisher,
+      {
+        getGroupingStep: (symbol) => useGroupingStore.getState().getStep(symbol),
+        publishTickers: (tickers) => useTickerStore.getState().upsertMany(tickers),
+        publishOrderBook: (vms) => useOrderBookViewStore.getState().upsertMany(vms),
+        publishTrades: (snapshots) => useTradeStore.getState().upsertMany(snapshots),
+      },
+    );
+    const stopPipeline = pipeline.start();
 
-      if (messages.length > 0) {
-        const batches = batchProcessor.process(messages);
-
-        for (const batch of batches) {
-          if (batch.channel === 'ticker') {
-            const lastMsg = batch.messages[batch.messages.length - 1] as RawTickerMessage;
-            try {
-              const ticker = tickerEngine.process(lastMsg);
-              const prev = useTickerStore.getState().tickers.get(lastMsg.symbol);
-              if (tickerEngine.isValidUpdate(ticker, prev)) {
-                tickerPublisher.update(ticker);
-              }
-            } catch (err) {
-              if (import.meta.env.DEV) {
-                console.warn('[TickerEngine] malformed message dropped:', err);
-              }
-            }
-          }
-
-          if (batch.channel === 'orderbook') {
-            for (const msg of batch.messages) {
-              const raw = msg as RawOrderBookMessage;
-              try {
-                orderBookEngine.apply(raw);
-                orderBookPublisher.markDirty(raw.symbol);
-              } catch (err) {
-                if (import.meta.env.DEV) {
-                  console.warn('[OrderBookEngine] message dropped:', err);
-                }
-              }
-            }
-          }
-
-          if (batch.channel === 'trades') {
-            for (const msg of batch.messages) {
-              const raw = msg as RawTradeMessage;
-              try {
-                tradeEngine.apply(raw);
-                tradePublisher.markDirty(raw.symbol);
-              } catch (err) {
-                if (import.meta.env.DEV) {
-                  console.warn('[TradeEngine] message dropped:', err);
-                }
-              }
-            }
-          }
-        }
-      }
-
-      tickerPublisher.tryFlush(timestamp, (tickers) => {
-        useTickerStore.getState().upsertMany(tickers);
-      });
-      orderBookPublisher.tryFlush(timestamp, (symbols) => {
-        const vms = [];
-        for (const symbol of symbols) {
-          const book = orderBookEngine.snapshot(symbol);
-          if (!book) continue;
-          const step = useGroupingStore.getState().getStep(symbol);
-          vms.push(orderBookPublisher.transform(book, step));
-        }
-        if (vms.length > 0) useOrderBookViewStore.getState().upsertMany(vms);
-      });
-      tradePublisher.tryFlush(timestamp, (symbols) => {
-        const nowMs = Date.now();
-        const snapshots = [];
-        for (const symbol of symbols) {
-          const snapshot = tradeEngine.snapshot(symbol, nowMs);
-          if (!snapshot) continue;
-          snapshots.push(snapshot);
-        }
-        if (snapshots.length > 0) useTradeStore.getState().upsertMany(snapshots);
-      });
-    });
-
-    rafScheduler.start();
-
+    // Recompute order book ViewModel immediately when the user changes grouping step,
+    // bypassing the 100ms publish interval so the change feels instant.
     const unsubscribeGrouping = useGroupingStore.subscribe(
       (s) => s.steps,
       (newSteps, prevSteps) => {
@@ -181,8 +135,7 @@ export function WebSocketProvider({ children }: Props) {
     wsManager.connect();
 
     return () => {
-      unschedule();
-      rafScheduler.stop();
+      stopPipeline();
       unsubscribeFocus();
       unsubscribeGrouping();
       adapter.cleanup();
