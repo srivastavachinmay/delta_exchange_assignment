@@ -23,25 +23,15 @@ The app opens at `http://localhost:3000`. It connects to the Delta Exchange WebS
 
 This project treats high-frequency WebSocket throughput as a first-class engineering problem. The full design is documented in [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
-**Short version:**
+![Simplified Real-time Pipeline](docs/diagrams/08-simplified-pipeline.svg)
 
-```
-WebSocket (200+ msg/sec)
-    ↓
-MessageQueue  (ring buffer — enqueue is O(1))
-    ↓
-BatchProcessor  (coalesce per symbol × channel, per-frame)
-    ↓
-RAFScheduler  (drain once per animation frame at 60fps)
-    ↓
-Domain Engines  (TickerEngine / OrderBookEngine / TradeEngine)
-    ↓
-Zustand Stores  (one write per symbol per frame)
-    ↓
-React  (selector-isolated leaf components — one re-render per changed symbol)
-```
+Exchange messages flow through a ring-buffer queue, are drained once per `requestAnimationFrame` tick, and written to Zustand exactly once per symbol per 100–150 ms window. React never touches WebSocket messages directly — leaf components re-render only when their own symbol's store reference changes.
 
-React never handles WebSocket messages directly. It reads from stores via O(1) per-symbol selectors and renders at the browser's frame rate.
+![Rendering Optimization Flow](docs/diagrams/07-rendering-optimization.svg)
+
+Five independent suppression layers prevent unnecessary work: ring-buffer backpressure → dirty-set filtering → publisher throttle → per-symbol Zustand selector → `React.memo`. In practice, fewer than 5% of components re-render on any given frame.
+
+See [`DIAGRAMS.md`](./DIAGRAMS.md) for the full diagram set — high-level architecture, per-channel data flows, component tree, and folder structure.
 
 ## Supported Symbols
 
