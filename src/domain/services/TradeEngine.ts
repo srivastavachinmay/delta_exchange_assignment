@@ -3,7 +3,7 @@ import type { Trade, TradeStats, TradeSnapshot } from '../entities/Trade';
 import { createPrice } from '../valueObjects/Price';
 
 export const MAX_TRADES = 100;
-const ONE_MINUTE_SEC = 60;
+const AGGREGATION_WINDOW_MS = 100;
 
 export class TradeEngine {
   private readonly state = new Map<TradingSymbol, Trade[]>();
@@ -13,17 +13,35 @@ export class TradeEngine {
     if (!Number.isFinite(price) || price <= 0) return;
     if (!Number.isFinite(message.size) || message.size <= 0) return;
 
+    const timestampMs = Math.floor(message.timestamp / 1000);
+    const side: Trade['side'] = message.buyer_role === 'taker' ? 'buy' : 'sell';
+
+    // newest-first — snapshot() produces an immutable copy so callers never observe internal mutations
+    const trades = this.state.get(message.symbol);
+
+    // Merge into head if same price, same side, within aggregation window.
+    if (trades && trades.length > 0) {
+      const head = trades[0]!;
+      if (
+        head.price === price &&
+        head.side === side &&
+        timestampMs - head.timestamp <= AGGREGATION_WINDOW_MS
+      ) {
+        trades[0] = { ...head, size: head.size + message.size, count: head.count + 1 };
+        return;
+      }
+    }
+
     const trade: Trade = {
       id: `${message.symbol}-${message.timestamp}`,
       symbol: message.symbol,
       price: createPrice(price),
       size: message.size,
-      side: message.buyer_role === 'taker' ? 'buy' : 'sell',
-      timestamp: Math.floor(message.timestamp / 1000),
+      count: 1,
+      side,
+      timestamp: timestampMs,
     };
 
-    // newest-first — snapshot() produces an immutable copy so callers never observe internal mutations
-    const trades = this.state.get(message.symbol);
     if (!trades) {
       this.state.set(message.symbol, [trade]);
       return;
@@ -52,14 +70,14 @@ export class TradeEngine {
 }
 
 function computeStats(trades: readonly Trade[], nowMs: number): TradeStats {
-  const cutoffSec = Math.floor(nowMs / 1000) - ONE_MINUTE_SEC; // trade.timestamp is in seconds
+  const cutoffMs = nowMs - 60_000;
   let volume1mBuy = 0;
   let volume1mSell = 0;
   let count1m = 0;
 
   for (const t of trades) {
-    if (t.timestamp < cutoffSec) break; // trades are newest-first; once past cutoff, done
-    count1m++;
+    if (t.timestamp < cutoffMs) break; // trades are newest-first; once past cutoff, done
+    count1m += t.count;
     if (t.side === 'buy') {
       volume1mBuy += t.size;
     } else {

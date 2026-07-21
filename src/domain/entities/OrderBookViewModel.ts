@@ -5,6 +5,7 @@ import type { SpreadResult } from '../calculations/Spread';
 import { groupLevels } from '../calculations/Grouping';
 import { computeCumulativeDepth } from '../calculations/Depth';
 import { computeSpread } from '../calculations/Spread';
+import { computeImbalance } from '../calculations/Imbalance';
 
 const MAX_DEPTH = 10;
 
@@ -14,6 +15,7 @@ export interface OrderBookViewModel {
   readonly bids: readonly DepthLevel[];
   readonly asks: readonly DepthLevel[];
   readonly spread: SpreadResult | null;
+  readonly imbalance: number | null;
 }
 
 export function buildViewModel(book: OrderBook, step: number): OrderBookViewModel {
@@ -31,5 +33,6 @@ export function buildViewModel(book: OrderBook, step: number): OrderBookViewMode
     bids: computeCumulativeDepth(groupedBids),
     asks: asksDisplay,
     spread: computeSpread(book),
+    imbalance: computeImbalance(groupedBids, groupedAsks),
   };
 }

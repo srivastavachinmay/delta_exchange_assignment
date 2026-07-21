@@ -222,3 +222,10 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+.tradeCount {
+  margin-left: 3px;
+  font-size: 10px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}

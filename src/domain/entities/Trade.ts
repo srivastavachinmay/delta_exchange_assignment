@@ -8,6 +8,7 @@ export interface Trade {
   readonly symbol: TradingSymbol;
   readonly price: Price;
   readonly size: number;
+  readonly count: number; // aggregated trade count within 100ms window at same price
   readonly side: TradeSide;
   readonly timestamp: number; // milliseconds
 }

@@ -287,3 +287,47 @@
   font-size: 12px;
   padding: 4px 0;
 }
+
+/* ── Imbalance bar ───────────────────────────────────────────────────── */
+.imbalanceBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  flex-shrink: 0;
+  background-color: rgba(255, 255, 255, 0.008);
+}
+
+.imbalanceStat {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  min-width: 40px;
+  user-select: none;
+}
+
+.imbalanceBidStat {
+  color: var(--color-bid);
+  text-align: left;
+}
+
+.imbalanceAskStat {
+  color: var(--color-ask);
+  text-align: right;
+}
+
+.imbalanceTrack {
+  flex: 1;
+  height: 4px;
+  background-color: color-mix(in srgb, var(--color-ask) 30%, transparent);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.imbalanceFill {
+  height: 100%;
+  background-color: var(--color-bid);
+  border-radius: 2px;
+  transition: width 200ms ease;
+}

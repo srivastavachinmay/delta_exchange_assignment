@@ -6,6 +6,7 @@ import { BidList } from './BidColumn';
 import { MidPriceBar } from './MidPriceBar';
 import { SpreadBar } from './SpreadBar';
 import { GroupingControl } from './GroupingControl';
+import { ImbalanceBar } from './ImbalanceBar';
 import styles from '../orderBook.module.css';
 
 interface Props {
@@ -26,6 +27,7 @@ export const OrderBook = memo(function OrderBook({ symbol }: Props) {
       <AskList symbol={symbol} precision={config.displayPrecision} baseAsset={baseAsset} />
       <SpreadBar symbol={symbol} precision={config.displayPrecision} />
       <MidPriceBar symbol={symbol} precision={config.displayPrecision} />
+      <ImbalanceBar symbol={symbol} />
       <BidList symbol={symbol} precision={config.displayPrecision} baseAsset={baseAsset} />
     </div>
   );

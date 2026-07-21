@@ -40,7 +40,10 @@ export const TradeRow = memo(function TradeRow({ trade, precision, largeTradeVal
     <div ref={rowRef} className={rowClass} onAnimationEnd={handleAnimationEnd}>
       <span className={styles.time}>{timeStr}</span>
       <span className={trade.side === 'buy' ? styles.buyPrice : styles.sellPrice}>{priceStr}</span>
-      <span className={styles.size}>{sizeStr}</span>
+      <span className={styles.size}>
+        {sizeStr}
+        {trade.count > 1 && <span className={styles.tradeCount}>×{trade.count}</span>}
+      </span>
     </div>
   );
 });

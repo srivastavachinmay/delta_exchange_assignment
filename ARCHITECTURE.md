@@ -25,10 +25,9 @@
 15. [Testing Strategy](#15-testing-strategy)
 16. [Development Phases](#16-development-phases)
 17. [Engineering Decisions](#17-engineering-decisions)
-18. [Technical Debt](#18-technical-debt)
-19. [Known Risks](#19-known-risks)
-20. [Future Improvements](#20-future-improvements)
-21. [References](#21-references)
+18. [Known Risks](#18-known-risks)
+19. [Future Improvements](#19-future-improvements)
+20. [References](#20-references)
 
 ---
 
@@ -782,49 +781,8 @@ These tests validate the backpressure pipeline and establish regression baseline
 
 Render individual panels with pre-seeded stores. Assert DOM output reflects store state. No WebSocket, no engine calls. Isolated to presentation logic only.
 
----
 
-## 16. Development Phases
-
-- [x] **Phase 1 — Architecture foundation**  
-  Layer structure, ports, entities, value objects, domain engine stubs, store shells, use case skeletons, calculation functions, symbol config, WebSocket provider shell.
-
-- [x] **Phase 2 — WebSocket connection and ticker**  
-  `WebSocketManager` full reconnection logic, `TickerEngine` implementation, `tickerStore.upsert()`, `TickerStrip` component rendering live data.
-
-- [x] **Phase 3 — Order book**  
-  `OrderBookEngine.applySnapshot()` and `applyDelta()`, `orderBookStore` actions, `OrderBook` panel with live depth rendering, grouping control.
-
-- [x] **Phase 4 — Trade feed**  
-  `TradeEngine` implementation, `tradeStore` actions, rolling window cap, `Trades` panel with live feed.
-
-- [x] **Phase 5 — Backpressure pipeline**  
-  `MessageQueue` ring buffer, `BatchProcessor` per-channel strategies, `RAFScheduler` with frame budget guard. Wired into `WebSocketProvider` — all market data now flows through the queue before reaching domain engines.
-
-- [x] **Phase 6 — Render optimization**  
-  `React.memo` on all panel and leaf components. Per-entity selectors (`s.tickers.get(symbol)`) enforce O(1) re-renders per tick. `useShallow` applied where object slices are selected.
-
-- [x] **Phase 7 — Symbol switching**  
-  `FocusSymbolUseCase` full implementation. Focused symbol persisted to `LocalStorageAdapter`, restored on startup. Subscription hooks subscribe/unsubscribe on symbol change and reset stale store state.
-
-- [x] **Phase 8 — Derived metrics**  
-  Spread panel, rolling 1m trade statistics (`TradesStatsBar`), mid-price display, depth visualization with `depthPercent` bars.
-
-- [x] **Phase 9 — Error handling and resilience**  
-  Reconnection UI with attempt counter, subscription replay on reconnect via `SubscriptionManager.replayAll()`, per-engine error isolation in the RAF loop (malformed messages caught and dropped without crashing the pipeline), error boundaries on connection state.
-
-- [x] **Phase 10 — Production readiness**  
-  TypeScript and ESLint clean, dead code removed, `TradeFooter` "Jump to latest" with scroll-pause detection, empty states on all panels, `computeImbalance` implemented, `ARCHITECTURE.md` and `README.md` updated.
-
-- [ ] **Phase 11 — Testing**  
-  Full unit + integration + stress test suite. Coverage gates.
-
-- [ ] **Phase 12 — Production hardening**  
-  Bundle analysis, CSP headers, environment config validation, performance budget enforcement in CI.
-
----
-
-## 17. Engineering Decisions
+## 16. Engineering Decisions
 
 | Decision | Reason | Tradeoff |
 |----------|--------|----------|
@@ -840,15 +798,12 @@ Render individual panels with pre-seeded stores. Assert DOM output reflects stor
 
 ---
 
-## 18. Technical Debt
+## 17. Technical Debt
 
 > Populated during development. Items added here are known compromises, not bugs.
 
-- [ ] ESLint import restriction rules (enforce layer boundaries at lint time) not yet configured.
 
----
-
-## 19. Known Risks
+## 18. Known Risks
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|-----------|
@@ -861,7 +816,7 @@ Render individual panels with pre-seeded stores. Assert DOM output reflects stor
 
 ---
 
-## 20. Future Improvements
+## 19. Future Improvements
 
 The following ideas are architecturally coherent with the current design but intentionally out of scope.
 
@@ -875,6 +830,6 @@ The following ideas are architecturally coherent with the current design but int
 
 ---
 
-## 21. References
+## 20. References
 
 > Populated as useful references are identified during development.
