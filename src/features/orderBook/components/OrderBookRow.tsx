@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useLayoutEffect, useRef } from 'react';
 import { formatOrderBookPrice } from '../orderBookFormatters';
 import styles from '../orderBook.module.css';
 
@@ -11,11 +11,16 @@ interface Props {
   readonly side: 'bid' | 'ask';
 }
 
-// toLocaleString() creates a new Intl resolver on every call; this avoids that.
 const sizeFormatter = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 0,
   maximumFractionDigits: 3,
 });
+
+const FLASH_THRESHOLD = 0.10;
+
+function handleFlashEnd(e: React.AnimationEvent<HTMLDivElement>): void {
+  e.currentTarget.classList.remove(styles.rowFlashUp ?? '', styles.rowFlashDown ?? '');
+}
 
 export const OrderBookRow = memo(function OrderBookRow({
   price,
@@ -28,13 +33,35 @@ export const OrderBookRow = memo(function OrderBookRow({
   const priceStr = formatOrderBookPrice(price, precision);
   const sizeStr = sizeFormatter.format(size);
   const totalStr = sizeFormatter.format(total);
-
-  // --depth drives the depth bar width via CSS; avoids a string allocation per render.
   const depthStyle = { '--depth': depthPercent } as React.CSSProperties;
+
+  const rowRef = useRef<HTMLDivElement>(null);
+  const prevSizeRef = useRef<number | undefined>(undefined);
+
+  useLayoutEffect(() => {
+    const prevSize = prevSizeRef.current;
+
+    if (prevSize !== undefined && prevSize > 0 && prevSize !== size) {
+      const changePct = Math.abs(size - prevSize) / prevSize;
+      if (changePct > FLASH_THRESHOLD) {
+        const el = rowRef.current;
+        if (el) {
+          const flashClass = size > prevSize
+            ? (styles.rowFlashUp ?? '')
+            : (styles.rowFlashDown ?? '');
+          el.classList.remove(styles.rowFlashUp ?? '', styles.rowFlashDown ?? '');
+          void el.offsetHeight;
+          el.classList.add(flashClass);
+        }
+      }
+    }
+
+    prevSizeRef.current = size;
+  }, [size]);
 
   if (side === 'ask') {
     return (
-      <div className={styles.row} style={depthStyle}>
+      <div ref={rowRef} className={styles.row} style={depthStyle} onAnimationEnd={handleFlashEnd}>
         <div className={`${styles.depthBar} ${styles.depthBarAsk}`} />
         <span className={styles.total}>{totalStr}</span>
         <span className={styles.size}>{sizeStr}</span>
@@ -44,7 +71,7 @@ export const OrderBookRow = memo(function OrderBookRow({
   }
 
   return (
-    <div className={styles.row} style={depthStyle}>
+    <div ref={rowRef} className={styles.row} style={depthStyle} onAnimationEnd={handleFlashEnd}>
       <div className={`${styles.depthBar} ${styles.depthBarBid}`} />
       <span className={styles.bidPrice}>{priceStr}</span>
       <span className={styles.size}>{sizeStr}</span>

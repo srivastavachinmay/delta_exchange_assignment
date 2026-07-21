@@ -87,6 +87,16 @@
 }
 
 /* ── Individual row ──────────────────────────────────────────────────── */
+@keyframes obFlashUp {
+  from { background-color: color-mix(in srgb, var(--color-bid) 28%, transparent); }
+  to   { background-color: transparent; }
+}
+
+@keyframes obFlashDown {
+  from { background-color: color-mix(in srgb, var(--color-ask) 28%, transparent); }
+  to   { background-color: transparent; }
+}
+
 .row {
   position: relative;
   isolation: isolate;
@@ -101,6 +111,14 @@
 
 .row:hover {
   background-color: rgba(255, 255, 255, 0.025);
+}
+
+.rowFlashUp {
+  animation: obFlashUp 400ms ease-out forwards;
+}
+
+.rowFlashDown {
+  animation: obFlashDown 400ms ease-out forwards;
 }
 
 /* ── Price / size cells ──────────────────────────────────────────────── */
