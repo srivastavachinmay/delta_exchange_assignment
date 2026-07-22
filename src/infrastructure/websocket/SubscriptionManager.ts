@@ -39,7 +39,9 @@ export class SubscriptionManager {
     if (fresh.length === 0) return;
 
     logger.subscribeIntent(channel, fresh);
-    this.manager.send(this._buildSubscribePayload(channel, fresh));
+    if (this.manager.isConnected) {
+      this.manager.send(this._buildSubscribePayload(channel, fresh));
+    }
     this.callbacks?.onDesiredAdded(fresh, channel);
   }
 
@@ -63,7 +65,9 @@ export class SubscriptionManager {
     if (removed.length === 0) return;
 
     logger.unsubscribeIntent(channel, removed);
-    this.manager.send(this._buildUnsubscribePayload(channel, removed));
+    if (this.manager.isConnected) {
+      this.manager.send(this._buildUnsubscribePayload(channel, removed));
+    }
     this.callbacks?.onDesiredRemoved(removed, channel);
   }
 

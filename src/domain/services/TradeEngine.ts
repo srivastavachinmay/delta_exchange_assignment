@@ -4,6 +4,7 @@ import { createPrice } from '../valueObjects/Price';
 
 export const MAX_TRADES = 100;
 const AGGREGATION_WINDOW_MS = 100;
+const STATS_WINDOW_MS = 60_000;
 
 export class TradeEngine {
   private readonly state = new Map<TradingSymbol, Trade[]>();
@@ -16,10 +17,8 @@ export class TradeEngine {
     const timestampMs = Math.floor(message.timestamp / 1000);
     const side: Trade['side'] = message.buyer_role === 'taker' ? 'buy' : 'sell';
 
-    // newest-first — snapshot() produces an immutable copy so callers never observe internal mutations
     const trades = this.state.get(message.symbol);
 
-    // Merge into head if same price, same side, within aggregation window.
     if (trades && trades.length > 0) {
       const head = trades[0]!;
       if (
@@ -46,9 +45,6 @@ export class TradeEngine {
       this.state.set(message.symbol, [trade]);
       return;
     }
-    if (trades.length >= MAX_TRADES) {
-      trades.length = MAX_TRADES - 1; // drop oldest (last element, newest-first order)
-    }
     trades.unshift(trade);
   }
 
@@ -56,11 +52,15 @@ export class TradeEngine {
     const trades = this.state.get(symbol);
     if (!trades) return null;
 
-    const snapshot = trades.slice(); // immutable copy — callers must not observe internal mutations
+    const cutoff = nowMs - STATS_WINDOW_MS;
+    let staleFrom = trades.length;
+    while (staleFrom > 0 && trades[staleFrom - 1]!.timestamp < cutoff) staleFrom--;
+    if (staleFrom < trades.length) trades.length = staleFrom;
+
     return {
       symbol,
-      trades: snapshot,
-      stats: computeStats(snapshot, nowMs),
+      trades: trades.slice(0, MAX_TRADES),
+      stats: computeStats(trades),
     };
   }
 
@@ -69,14 +69,12 @@ export class TradeEngine {
   }
 }
 
-function computeStats(trades: readonly Trade[], nowMs: number): TradeStats {
-  const cutoffMs = nowMs - 60_000;
+function computeStats(trades: readonly Trade[]): TradeStats {
   let volume1mBuy = 0;
   let volume1mSell = 0;
   let count1m = 0;
 
   for (const t of trades) {
-    if (t.timestamp < cutoffMs) break; // trades are newest-first; once past cutoff, done
     count1m += t.count;
     if (t.side === 'buy') {
       volume1mBuy += t.size;

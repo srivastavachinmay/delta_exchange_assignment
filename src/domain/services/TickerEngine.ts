@@ -34,11 +34,6 @@ export class TickerEngine {
     };
   }
 
-  /** Returns false when next is stale (timestamp ≤ previous) — discard. */
-  isValidUpdate(next: Ticker, prev: Ticker | undefined): boolean {
-    if (!prev) return true;
-    return next.timestamp > prev.timestamp;
-  }
 }
 
 function safePrice(raw: string | undefined | null): ReturnType<typeof createPrice> {

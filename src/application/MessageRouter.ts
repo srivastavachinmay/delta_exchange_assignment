@@ -15,7 +15,7 @@ const WIRE_TO_CHANNEL: Readonly<Partial<Record<string, Channel>>> = {
 };
 
 // Frames that pass JSON.parse but lack the InboundMessage shape — suppress shape warnings for these.
-const EXPECTED_NON_EVENT_TYPES = new Set(['heartbeat', 'heartbeat_response']);
+const EXPECTED_NON_EVENT_TYPES = new Set(['heartbeat', 'heartbeat_response', 'subscriptions']);
 
 // Market data channels that are buffered through the queue rather than dispatched immediately.
 // Control channels (subscription, connection) always dispatch directly so they are never delayed.
