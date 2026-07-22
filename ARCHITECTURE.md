@@ -1,7 +1,7 @@
 # Architecture — Real-Time Crypto Trading Dashboard
 
 > **Engineering Design Document and Decision Log**  
-> Status: Living document. Updated as phases are completed.  
+> Status: Finalized. Reflects the completed implementation.  
 > Target audience: Senior frontend engineers reviewing this codebase.
 
 ---
@@ -23,11 +23,11 @@
 13. [Symbol Configuration](#13-symbol-configuration)
 14. [Performance Strategy](#14-performance-strategy)
 15. [Testing Strategy](#15-testing-strategy)
-16. [Development Phases](#16-development-phases)
-17. [Engineering Decisions](#17-engineering-decisions)
+16. [Engineering Decisions](#16-engineering-decisions)
+17. [Known Issues and Technical Debt](#17-known-issues-and-technical-debt)
 18. [Known Risks](#18-known-risks)
 19. [Future Improvements](#19-future-improvements)
-20. [References](#20-references)
+20. [Scaling: 50 Symbols with Full Order Book + Trades](#20-scaling-50-symbols-with-full-order-book--trades)
 
 ---
 
@@ -110,9 +110,7 @@ React does not drive the application. It does not own the WebSocket lifecycle, s
 
 ## Layer Dependency Rules
 
-This section defines the project's import boundaries and architectural constraints. It is the **single source of truth** that all future implementation phases must follow.
-
-> **Note for Claude Code:** All future Claude Code implementation phases must read and comply with these Layer Dependency Rules before generating any code.
+This section defines the project's import boundaries and architectural constraints.
 
 ---
 
@@ -240,8 +238,6 @@ Components are responsible only for presentation.
 
 ### High-Frequency Rendering Rule
 
-> **All future Claude Code implementation phases must follow this rule without exception. It is not optional and is not subject to tradeoffs.**
-
 High-frequency data — ticker updates, order book level changes, trade arrivals — must **never** be passed through multiple component levels as props.
 
 **Required pattern:**
@@ -292,7 +288,7 @@ When a container subscribes to `s.tickers` (the whole map), every update to any 
 - [ ] Component is wrapped in `React.memo`
 - [ ] Click/event handlers use `useCallback` with stable dependencies
 
-The `TickerCard` / `PriceDisplay` / `PercentageChange` pattern established in Phase 3 is the canonical template. Apply it identically to `OrderBookRow`, `TradeRow`, and every future high-frequency UI element.
+The `TickerCard` / `PriceDisplay` / `PercentageChange` pattern is the canonical template. Apply it identically to `OrderBookRow`, `TradeRow`, and every future high-frequency UI element.
 
 ---
 
@@ -310,7 +306,7 @@ No other file should instantiate `new WebSocket()`.
 
 Business logic belongs exclusively inside domain engines and calculators:
 
-`TickerEngine`, `OrderBookEngine`, `TradeEngine`, `GroupingEngine`, `DepthCalculator`, `SpreadCalculator`, `TradeAggregator`, `RollingStatistics`
+`TickerEngine`, `OrderBookEngine`, `TradeEngine`, `Grouping.ts`, `Depth.ts`, `Spread.ts`, `Imbalance.ts`
 
 Business logic must never exist inside React Components, Stores, or Adapters.
 
@@ -349,8 +345,6 @@ No layer may bypass another layer.
 - Keep files focused on a single responsibility.
 - Do not bypass the Application Layer.
 - React is the presentation layer, not the architecture.
-
-> **All future Claude Code implementation phases must read and comply with these Layer Dependency Rules before generating code.**
 
 ---
 
@@ -451,9 +445,9 @@ src/
 | Layer | Responsibility | Depends On | Must Not Know About | Examples |
 |-------|---------------|------------|---------------------|---------|
 | **Domain** | Business logic, invariants, entity state machines | `shared/types` only | React, Zustand, WebSocket, fetch, localStorage | `OrderBookEngine`, `Price`, `Spread.calculate()` |
-| **Application** | Use case orchestration, message routing, backpressure scheduling | Domain ports, `shared/types` | React, Zustand, concrete adapters | `SubscribeMarketUseCase`, `MessageRouter`, `RAFScheduler` |
+| **Application** | Use case orchestration, message routing, backpressure scheduling | Domain ports, `shared/types` | React, Zustand, concrete adapters | `FocusSymbolUseCase`, `MessageRouter`, `RAFScheduler` |
 | **Infrastructure** | Adapter implementations for external systems | Application ports, `shared/types` | Domain entities (only raw types), React | `WebSocketAdapter`, `WebSocketManager`, `SubscriptionManager`, `LocalStorageAdapter` |
-| **Stores (`app/stores`)** | Reactive state container; bridge between pipeline and React | Domain entities, `shared/types` | WebSocket, domain engines directly | `tickerStore`, `orderBookStore` |
+| **Stores (`app/stores`)** | Reactive state container; bridge between pipeline and React | Domain entities, `shared/types` | WebSocket, domain engines directly | `tickerStore`, `orderBookViewStore`, `tradeStore` |
 | **Features (React)** | UI rendering and user interaction | Stores (via selectors), `shared/types` | Application internals, infrastructure, domain engines | `OrderBookPanel`, `TickerStrip` |
 
 ---
@@ -483,11 +477,11 @@ export interface MarketDataPort {
 
 Defines the contract for persisting user preferences (selected symbol, grouping level). The concrete implementation (`LocalStorageAdapter`) is injected at startup. This allows tests to inject an in-memory store without touching `localStorage`.
 
-### `WebSocketAdapter` — Infrastructure Adapter *(Implemented)*
+### `WebSocketAdapter` — Infrastructure Adapter
 
 Implements `MarketDataPort`. Constructed with three collaborators — `MessageRouterPort`, `WebSocketManager`, and `SubscriptionManager` — and wired by the composition root via `initialize()`. The constructor is side-effect-free; `initialize()` registers the raw message listener on `WebSocketManager`, the reconnect replay hook on `WebSocketManager` (delegating to `SubscriptionManager.replayAll()`), and the per-channel handlers on `MessageRouter`. `subscribe()` and `unsubscribe()` delegate entirely to `SubscriptionManager`. Components and use cases never import this class directly — they hold a `MarketDataPort` reference.
 
-### `SubscriptionManager` — Infrastructure Service *(Implemented)*
+### `SubscriptionManager` — Infrastructure Service
 
 Owns the desired subscription set — the channels and symbols the application has requested but which may or may not yet be acknowledged by the exchange. Responsibilities:
 
@@ -498,7 +492,7 @@ Owns the desired subscription set — the channels and symbols the application h
 
 `SubscriptionManager` is the single source of truth for subscription *intent*. `subscriptionStore` is the source of truth for server-*acknowledged* subscriptions. They are deliberately separate: a symbol can be desired before the socket opens and acknowledged only after the exchange confirms.
 
-### `LocalStorageAdapter` — Infrastructure Adapter *(Implemented)*
+### `LocalStorageAdapter` — Infrastructure Adapter
 
 Implements `StoragePort`. Wraps `localStorage` with typed get/set. Isolated here so the storage mechanism can be replaced (e.g., with `IndexedDB`) without touching application or domain code.
 
@@ -584,7 +578,7 @@ Incoming WebSocket frames (200+/sec)
 | `orderbook` | `ordered-sequence` | Deltas must be applied in sequence order. All deltas in a frame are applied to reconstruct correct state. |
 | `trades` | `accumulate-all` | Every trade is a discrete event and must be appended to the feed. |
 
-**`RAFScheduler`** — drives the drain-process-write loop via `requestAnimationFrame`. Per-frame frame budget: 16.7ms at 60fps. A performance guard (Phase 5) measures domain processing time with `performance.now()`. If processing exceeds 8ms (half the budget), the scheduler defers to the next frame to prevent jank.
+**`RAFScheduler`** — drives the drain-process-write loop via `requestAnimationFrame`. Per-frame budget: 16.7ms at 60fps. A `performance.now()` guard measures total callback time per frame. If it exceeds 8ms (half the budget), a dev-mode warning is emitted. The next frame is still scheduled — dropping a frame entirely would cause visible staleness, which is worse than a brief overrun.
 
 ### Implementation Status
 
@@ -603,19 +597,19 @@ Per-frame behavior:
 
 All global application state lives in Zustand stores. Stores are isolated by concern. No store imports another store.
 
-### `connectionStore` *(Implemented)*
+### `connectionStore`
 
 Tracks WebSocket connection lifecycle state: `disconnected | connecting | connected | reconnecting | error`. Written exclusively by `WebSocketManager`. Read by `ConnectionStatusBar`.
 
 **Why isolated:** Connection state changes frequently and independently of market data. Isolating it prevents market data re-renders from triggering connection UI updates and vice versa.
 
-### `subscriptionStore` *(Implemented)*
+### `subscriptionStore`
 
 Tracks which `(symbol, channel)` pairs are currently acknowledged by the exchange. Written by `SubscriptionHandler`. Read by components that need to conditionally render loading states.
 
 **Why isolated:** Subscription state is control-plane metadata. It has no business being colocated with ticker prices.
 
-### `tickerStore` *(Implemented — shell)*
+### `tickerStore`
 
 ```typescript
 { tickers: ReadonlyMap<TradingSymbol, Ticker> }
@@ -627,56 +621,109 @@ Selector pattern for render isolation:
 const ticker = useTickerStore(s => s.tickers.get('BTCUSD'))
 ```
 
-Zustand's `subscribeWithSelector` compares selector output via `Object.is`. When ETHUSD updates, the `BTCUSD` selector returns the same reference — no re-render. The `upsert(ticker)` action (Phase 2) writes a new `Map` with a new entry reference for the updated symbol only.
+Zustand's `subscribeWithSelector` compares selector output via `Object.is`. When ETHUSD updates, the `BTCUSD` selector returns the same reference — no re-render. The `upsert(ticker)` action writes a new `Map` with a new entry reference for the updated symbol only.
 
-### `orderBookStore` *(Implemented — shell)*
+### `orderBookViewStore`
 
 ```typescript
-{ books: ReadonlyMap<TradingSymbol, OrderBook> }
+{ books: ReadonlyMap<TradingSymbol, OrderBookViewModel> }
 ```
 
-Same selector isolation as `tickerStore`. `applySnapshot()` and `applyDelta()` actions are planned for Phase 3. These actions call `OrderBookEngine` and write the resulting `OrderBook` entity.
+Stores the fully processed, display-ready ViewModel rather than the raw `OrderBook` entity. The raw book is held internally by `OrderBookEngine`; only the derived ViewModel (grouped, cumulative depth computed, display-ordered) is written to the store. This means components never trigger grouping or depth computations — those run in the application layer before the store write.
 
-**Data structure rationale:** `OrderBook.bids` and `OrderBook.asks` are stored as `readonly [price, size][]` tuples rather than `Map<number, number>`. Arrays give O(1) iteration for rendering (which dominates at 60fps), at the cost of O(log n) insertion for deltas. At 50 deltas/sec × 20 levels = 1,000 potential level operations/second, tuple arrays also eliminate per-entry object allocation overhead that accumulates under the GC.
+Same `ReadonlyMap` + `upsert`/`upsertMany` selector isolation as `tickerStore`.
 
-### `tradeStore` *(Implemented — shell)*
+### `tradeStore`
 
 ```typescript
 { trades: ReadonlyMap<TradingSymbol, readonly Trade[]> }
 ```
 
-Trades are append-only. Phase 4 will introduce a rolling window cap (configurable, default 50 trades per symbol) to prevent unbounded memory growth.
+Trades are append-only with a rolling window cap (default 50 trades per symbol) to prevent unbounded memory growth.
 
 ---
 
 ## 12. Domain Engines
 
-Domain engines are stateless pure services. They receive current state and an incoming message; they return new state. No engine holds mutable state internally. The caller (application layer) owns the current entity and passes it in on each call.
+Domain engines are the home of business logic. `TickerEngine` is a pure stateless transformer — `process()` takes a raw message and returns a `Ticker` entity with no side effects. `OrderBookEngine` and `TradeEngine` maintain per-symbol state internally (a `Map<TradingSymbol, ...>`) because order book and trade data is cumulative across messages. The application layer owns engine lifetimes and calls them on each processed frame.
 
-### `TickerEngine` *(Phase 2 — Planned)*
+### `TickerEngine`
 
-**Planned responsibilities:**
-- Parse and validate raw ticker message fields
-- Produce an immutable `Ticker` entity with typed fields
-- Compute `change24h`, `changePercent24h`, and `priceDirection` (up/down/flat) for UI indicators
+- Parses and validates raw ticker message fields
+- Produces an immutable `Ticker` entity with typed fields
+- Computes `change24h`, `changePercent24h`, and `priceDirection` (up/down/flat) for UI indicators
 
-### `OrderBookEngine` *(Phase 3 — Planned)*
+### `OrderBookEngine`
 
-**Planned responsibilities:**
-- `applySnapshot(message): OrderBook` — replace full book state, reset sequence counter
-- `applyDelta(current, message): OrderBook` — validate sequence continuity, merge delta levels, maintain sort invariants (bids descending, asks ascending), cap at `MAX_DEPTH` levels
-- `isValidSequence(book, next): boolean` — drop out-of-sequence deltas and signal that a fresh snapshot is needed
+- `apply(message)` — parses string price/size fields, filters zero-size entries, sorts bids descending and asks ascending, stores as `PriceLevel` tuples
+- `snapshot(symbol)` — returns a shallow copy of the current book for ViewModel construction
+- `clear(symbol)` — resets book state on unsubscribe
 
-**Sequence validation:** Delta messages that arrive out-of-sequence indicate a missed message (gap in the stream). The correct response is to request a new snapshot, not to apply the delta anyway. `isValidSequence` provides this check. It is the only implemented method on `OrderBookEngine`.
+Delta Exchange sends full book snapshots on every `l2_orderbook` message (not incremental deltas), so no sequence tracking or delta merging is required. See Known Issues for the gap-recovery limitation this entails.
 
-### `TradeEngine` *(Phase 4 — Planned)*
+### `TradeEngine`
 
-**Planned responsibilities:**
-- Parse raw trade messages into typed `Trade` entities
-- Maintain a rolling window of trades per symbol (bounded list)
-- Compute rolling statistics for the trades panel
+- Parses raw trade messages into typed `Trade` entities
+- Maintains a rolling window of trades per symbol (capped at 50)
+- Computes rolling aggregate statistics for the trades panel
 
-### Domain Calculation Functions *(Implemented — Phase 1)*
+### Order Book Grouping Pipeline
+
+Grouping is a presentation-layer concern: the raw book (in `OrderBookEngine`) is always stored at full precision. The grouped ViewModel is derived on demand.
+
+**Pipeline stages:**
+
+```
+RawOrderBookMessage
+  → OrderBookEngine.apply()          # parse strings, sort bids desc / asks asc, store PriceLevel tuples
+  → RAF tick (dirty set drains)
+  → buildViewModel(book, step)
+      → groupLevels(bids, step, 'bid')   # O(n) — bids grouped DOWN (floor)
+      → groupLevels(asks, step, 'ask')   # O(n) — asks grouped UP (ceil)
+      → computeCumulativeDepth()         # add running total for depth bar
+      → asks.reverse()                   # display order: highest price first, best ask adjacent to spread
+      → computeSpread() + computeImbalance()
+  → orderBookViewStore.upsertMany()   # Zustand write, triggers React
+```
+
+**`groupLevels` implementation (`Grouping.ts`):**
+
+Delta Exchange sends full snapshots on every `l2_orderbook` message (not incremental deltas). `apply()` sorts the full book once. Because the input is sorted, same-group entries are always contiguous — a single O(n) scan suffices with no Map or secondary sort:
+
+```typescript
+for (const [price, size] of levels) {
+  const key = groupFn(price, step);   // floor for bids, ceil for asks
+  if (key === currentKey) {
+    currentSize += size;              // accumulate into current bucket
+  } else {
+    result.push([currentKey, currentSize]);
+    if (result.length === maxDepth) return result;   // early exit at display cap
+    currentKey = key; currentSize = size;
+  }
+}
+```
+
+**Floating-point safety:** `snapPrecision` infers decimal places from the step string (`step.toString()`) and calls `toFixed()` accordingly. This prevents `Math.floor(1.1 / 0.1) * 0.1 → 1.0999...` from producing a key that mismatches the next level's key.
+
+**Instant grouping-step response:** The 500ms publish throttle governs WebSocket-driven updates. When the user changes the step control, waiting up to 500ms would feel broken. Solution: `WebSocketProvider` holds an external Zustand subscription on `groupingStore.steps`:
+
+```typescript
+useGroupingStore.subscribe(s => s.steps, (newSteps, prevSteps) => {
+  for (const [symbol, step] of newSteps) {
+    if (prevSteps.get(symbol) !== step) {
+      const book = orderBookEngine.snapshot(symbol);  // current raw book
+      const vm = orderBookPublisher.transform(book, step);
+      useOrderBookViewStore.getState().upsert(vm);    // bypass throttle
+    }
+  }
+});
+```
+
+The raw book is always available from `orderBookEngine.snapshot()`. The ViewModel is rebuilt synchronously and written to the store directly. The architecture boundary is preserved — the domain engine is not mutated; only the derived ViewModel store is updated via its public action.
+
+**Why client-side grouping (not server-side):** Delta Exchange does not expose a server-side grouped order book endpoint. Client-side grouping also means zero round-trip latency on step changes and allows the raw book to be used for spread and imbalance calculations at full precision regardless of the active display step.
+
+### Domain Calculation Functions
 
 Pure functions with no side effects. Tested independently.
 
@@ -719,26 +766,7 @@ BTCUSD: {
 
 ## 14. Performance Strategy
 
-### Decisions Deferred Intentionally
-
-The following optimizations are architecturally planned but not yet implemented. They are deferred because:
-
-1. The data pipeline (Phase 5) must be in place before rendering optimizations are meaningful — profiling render frequency before establishing frame-aligned batching would produce misleading baselines.
-2. Premature optimization at the React layer would introduce complexity before correctness is established.
-
-| Optimization | Why Deferred | Target Phase |
-|-------------|-------------|-------------|
-| `requestAnimationFrame` batching | Requires `RAFScheduler` + `MessageQueue` | Phase 5 |
-| Ring buffer `MessageQueue` | Requires pipeline integration | Phase 5 |
-| `Map`-based order book delta merging | Requires `OrderBookEngine` implementation | Phase 3 |
-| Memoized selectors (`useShallow`, custom equality) | Effective only after render frequency is measured | Phase 6 |
-| `React.memo` on panel components | Same as above | Phase 6 |
-| Row virtualization (order book depth) | Requires real data volume to measure need | Phase 6 |
-| CSS-driven price flash animations | Requires real ticker data | Phase 3 |
-| Time-windowed trade queue | Requires `TradeEngine` | Phase 4 |
-| Frame budget guard (`performance.now()`) | Part of `RAFScheduler` implementation | Phase 5 |
-
-### Decisions Already Made for Performance
+### Implemented Optimizations
 
 - **Tuple arrays for order book levels** — `[price, size][]` instead of `{price, size}[]` eliminates object allocation per level at update frequency.
 - **`ReadonlyMap` in stores** — prevents accidental mutation; ensures reference stability for unchanged symbols in `Object.is` selector comparisons.
@@ -755,7 +783,7 @@ The following optimizations are architecturally planned but not yet implemented.
 Domain engines, calculation functions, and value objects are pure TypeScript with no browser or framework dependencies. They are testable with `node:test` or Vitest with no setup overhead.
 
 Target coverage:
-- `OrderBookEngine`: snapshot application, delta merging, sequence validation, out-of-sequence rejection, price level removal (size = 0), max depth cap
+- `OrderBookEngine`: snapshot application, zero-size entry filtering, sort invariants (bids desc / asks asc), snapshot copy correctness
 - `TickerEngine`: field parsing, direction computation, edge cases (zero volume, negative change)
 - `TradeEngine`: rolling window bounds, trade entity construction
 - `Spread`, `Depth`, `Grouping`, `Imbalance`: property-based tests with boundary values
@@ -766,7 +794,7 @@ Test the full pipeline path without React: feed raw WebSocket message fixtures t
 
 ### Application Layer Tests
 
-Test use cases with a `MockMarketDataAdapter` implementing `MarketDataPort`. Assert that `SubscribeMarketUseCase.subscribe()` calls the port's `subscribe()` with the correct arguments. Assert that invalid symbols are rejected before reaching the port.
+Test `FocusSymbolUseCase` with an in-memory `StoragePort` stub. Assert that `restore()` returns the persisted symbol on cold start, that `focus()` persists the new symbol, and that an invalid symbol is rejected before touching storage.
 
 ### Stress / Throughput Tests
 
@@ -777,7 +805,7 @@ Replay recorded high-volatility message streams (200+ msg/sec) through the full 
 
 These tests validate the backpressure pipeline and establish regression baselines before React rendering is profiled.
 
-### Component Tests *(Phase 6)*
+### Component Tests
 
 Render individual panels with pre-seeded stores. Assert DOM output reflects store state. No WebSocket, no engine calls. Isolated to presentation logic only.
 
@@ -787,31 +815,41 @@ Render individual panels with pre-seeded stores. Assert DOM output reflects stor
 | Decision | Reason | Tradeoff |
 |----------|--------|----------|
 | **Zustand over Redux** | Minimal boilerplate, selector-native subscriptions, no `Provider` wrapping required, `subscribeWithSelector` enables surgical re-renders out of the box. | Smaller ecosystem; less enforced structure. Mitigated by explicit store interface types. |
-| **Vite over CRA / webpack** | Sub-second HMR for a project with domain-heavy TypeScript; native ESM in dev eliminates bundle step latency. | Vite's production build uses Rollup; webpack ecosystem plugins unavailable. No material impact for this project. |
-| **React over other frameworks** | Dominant ecosystem for trading UIs; `subscribeWithSelector` middleware on Zustand is well-tested against React's reconciler; interview context assumes React familiarity. | React's diffing is not optimal for fixed-layout high-frequency numerical updates. Mitigated by RAF batching + `React.memo`. |
 | **Hexagonal Architecture** | Decouples the domain from infrastructure. The exchange adapter, storage mechanism, and test fixtures are all interchangeable behind port interfaces. | More indirection than a flat structure. Justified: without it, changing the WebSocket message format requires touching domain code. |
 | **`requestAnimationFrame` scheduler** | Aligns all store writes with the browser's paint cycle. Prevents mid-frame state mutations, reduces render count from 200/sec to 60/sec. | Adds latency (max ~16ms per message before processing). Acceptable for market data; would not be acceptable for order placement confirmations. |
 | **Tuple arrays for order book levels** | `[price, size][]` avoids per-level object allocation. At 50 deltas/sec × 20 levels, object allocation overhead compounds under GC. Arrays also give O(1) indexed iteration for rendering. | Less readable than `{price, size}[]`. Mitigated by the `PriceLevel` type alias and clear naming. |
-| **Domain-defined ports** | Prevents the anti-pattern of defining ports in the infrastructure layer and having the domain adapt to them. The domain specifies what data it needs; infrastructure satisfies the contract. | Requires more discipline to maintain. Enforced by ESLint import restrictions (planned Phase 1 follow-up). |
+| **Domain-defined ports** | Prevents the anti-pattern of defining ports in the infrastructure layer and having the domain adapt to them. The domain specifies what data it needs; infrastructure satisfies the contract. | Requires more discipline to maintain. ESLint import restrictions are a planned follow-up. |
 | **Ring buffer with overwrite on full** | For market data, the only message that matters is the most recent. Dropping stale messages under backpressure is correct domain behavior, not a failure mode. | A naive observer would interpret overwrites as data loss. Documented explicitly here to prevent future engineers from treating it as a bug. |
 | **`ReadonlyMap` in store state** | Prevents accidental mutation of store state outside of Zustand actions. Zustand's `immer` middleware is not used — all updates produce new Map instances explicitly to guarantee reference stability for selectors. | Slightly more verbose update code. Explicit is safer here. |
 
 ---
 
-## 17. Technical Debt
+## 17. Known Issues and Technical Debt
 
-> Populated during development. Items added here are known compromises, not bugs.
+### Actual Bugs / Limitations
+
+| Issue | Description | Severity |
+|-------|-------------|----------|
+| **No sequence gap recovery** | `OrderBookEngine.apply()` replaces the full book on every message. Delta Exchange sends full snapshots (not incremental deltas) for `l2_orderbook`, so there is no sequence counter. If the WebSocket stream drops a message, there is no detection mechanism — the book silently reflects the last received snapshot rather than requesting a new one. | Medium |
+| **No order book snapshot re-request on reconnect** | On reconnect, `SubscriptionManager.replayAll()` re-sends channel subscriptions. However, the WebSocket open event does not wait for server acknowledgement before considering the book valid. During the 1–2 second window before the first snapshot arrives, the order book shows stale data from the previous session rather than a loading state. | Low-Medium |
+| **Single ring buffer across all symbols and channels** | `MessageQueue` is a 256-slot ring buffer shared across all 6 symbols × 3 channels. Under sustained peak load, a single high-traffic symbol (BTCUSD at peak volatility) can fill the buffer and trigger overwrites that evict messages from other symbols before they are processed. The ring buffer semantics (latest wins) are correct for market data, but the shared capacity means hot symbols starve quiet ones. | Low (acceptable under current load) |
+| **Header shows "Connected" when device goes offline** | Browsers do not immediately fire `socket.onclose` when the network is lost — the event is delayed until TCP keepalive times out, which can take minutes. The heartbeat sends a ping but never checks for a pong response, so a silent drop is invisible to the app. No `navigator.onLine` / `offline` event listener exists. Result: the status bar shows green "Connected" for an extended window after the device loses connectivity. Fix: listen for `window.addEventListener('offline', ...)` to force status to `'reconnecting'` immediately, and/or validate heartbeat round-trips. | Medium |
+
+### Deliberate Simplifications (Not Bugs)
+
+- **Full snapshot replacement instead of delta merging** — Delta Exchange sends full order book snapshots on `l2_orderbook`. This simplifies `OrderBookEngine` significantly (no merge logic, no sequence tracking) but means each message carries the full book payload rather than just changed levels. Acceptable for 6 symbols; would not scale to high-symbol-count deployments.
+- **500ms publish throttle is fixed, not adaptive** — The throttle interval is a constant. Under low-traffic conditions it adds unnecessary latency; under extreme conditions a shorter interval might be warranted. An adaptive throttle based on message volume was considered but not implemented.
+- **No virtualized order book rows** — With 10 visible levels per side, row virtualization provides no benefit. If `MAX_DEPTH` were increased to 50+, virtualization would become necessary.
 
 
 ## 18. Known Risks
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|-----------|
-| **High-frequency WS traffic saturating main thread** | High (BTC perpetual at peak volatility) | Jank, dropped frames, CPU throttle | RAF batching + MessageQueue backpressure (Phase 5) |
-| **Memory growth from unbounded trade lists** | Medium | Tab OOM crash over long sessions | Rolling window cap in `tradeStore` (Phase 4) |
-| **Order book sequence gaps causing stale state** | Medium | Incorrect bids/asks displayed | Sequence validation in `OrderBookEngine` + snapshot re-request (Phase 3/9) |
+| **High-frequency WS traffic saturating main thread** | High (BTC perpetual at peak volatility) | Jank, dropped frames, CPU throttle | RAF batching + MessageQueue backpressure |
+| **Memory growth from unbounded trade lists** | Medium | Tab OOM crash over long sessions | Rolling window cap in `tradeStore` |
 | **Subscription desync on reconnect** | Medium | Missing data feeds post-reconnect | `SubscriptionManager.replayAll()` fires on every socket open via a ready listener on `WebSocketManager` — desired subscriptions are replayed automatically. Server ack tracking remains in `subscriptionStore` via `SubscriptionHandler`. |
-| **Render storms on symbol switch** | Low-Medium | Momentary UI freeze during navigation | Store reset before subscribe + transition state (Phase 7) |
+| **Render storms on symbol switch** | Low-Medium | Momentary UI freeze during navigation | Store reset before subscribe + transition state |
 | **WebSocket message format changes by exchange** | Low | Parse failures, silent data drop | Typed parse guards in `MessageRouter`; exchange changelog monitoring |
 
 ---
@@ -824,12 +862,47 @@ The following ideas are architecturally coherent with the current design but int
 - **`SharedArrayBuffer` for order book state** — Zero-copy transfer of price level arrays between worker and main thread. Requires COOP/COEP headers.
 - **`OffscreenCanvas` for depth chart** — Render the order book depth curve in a worker, eliminating GPU upload overhead from the main thread.
 - **`IndexedDB` snapshots** — Persist the last known order book state across page loads. Eliminates the 1–2 second cold-start window where the book is empty.
-- **Server-sent reconciliation** — Compare local order book sequence against exchange's canonical state endpoint to detect and recover from long-running drift.
 - **Metrics dashboard** — Internal panel exposing pipeline throughput (messages/frame), RAF frame duration, store write frequency. Useful during performance debugging.
 - **Multi-exchange adapter** — The `MarketDataPort` interface is exchange-agnostic. A Binance adapter would require a new `WebSocketAdapter` implementation and a format translator.
 
 ---
 
-## 20. References
+## 20. Scaling: 50 Symbols with Full Order Book + Trades
 
-> Populated as useful references are identified during development.
+The current design handles 6 symbols comfortably. At 50 symbols with full order book and trade feeds, three things break first — in this order.
+
+### What Breaks First
+
+**1. Main thread frame budget (breaks immediately)**
+
+The RAF scheduler processes all dirty symbols in a single tick. At 50 symbols, each tick calls `buildViewModel()` for every dirty symbol. `buildViewModel` runs `groupLevels` (O(n)) × 2 sides + `computeCumulativeDepth` × 2 + `computeSpread` + `computeImbalance`. At 50 symbols all firing simultaneously, this comfortably exceeds the 16.7ms frame budget and produces sustained jank.
+
+Fix: move `OrderBookEngine` and `buildViewModel` to a **Web Worker**. The stateless engine design makes this straightforward — post raw messages in, receive ViewModels back. The worker runs its own processing loop; only the finished ViewModel crosses the thread boundary into the main thread's store.
+
+**2. WebSocket subscription limits (breaks within minutes)**
+
+50 symbols × 3 channels = 150 subscriptions on one connection. Most exchanges (including Delta Exchange) enforce per-connection subscription limits of 50–100. Beyond that, new subscriptions are silently dropped or the connection is terminated.
+
+Fix: **connection sharding**. Partition symbols across N WebSocket connections (`Math.ceil(symbolCount / SYMBOLS_PER_CONNECTION)`). Each connection manages its own `SubscriptionManager`. A `ConnectionPool` abstraction at the application layer routes subscription commands to the owning connection. This is the only structural change required — the pipeline above each connection is identical to the current design.
+
+**3. Zustand subscription fan-out (degrades progressively)**
+
+Each component subscribes to its own symbol's slice via a per-symbol selector. At 50 symbols, a single market update causes Zustand to evaluate 50 × (3 stores) = 150 selector comparisons in the React reconciler per frame. React.memo contains the re-renders to the affected symbols, but the selector evaluation overhead scales linearly.
+
+Fix: **coarser update batching**. Instead of writing one symbol per Zustand `upsert`, batch all dirty symbols into a single `upsertMany` call per store per frame (already the design — `useOrderBookViewStore.getState().upsertMany(vms)`). With `subscribeWithSelector`, Zustand notifies each subscriber exactly once per store write regardless of how many symbols changed. The current `upsertMany` pattern already handles this correctly.
+
+The secondary fix at 50 symbols is **UI virtualization**: only render panels for the ~6 symbols currently visible in the viewport. Background symbols still process messages and maintain state; they simply have no mounted components consuming that state.
+
+### Redesign Summary for 50 Symbols
+
+| Layer | Current | At 50 Symbols |
+|-------|---------|---------------|
+| WebSocket | 1 connection, 18 subscriptions | N connections via `ConnectionPool`, ~25 subscriptions each |
+| Processing | Main thread RAF loop | `OrderBookEngine` + `buildViewModel` in Web Worker per connection |
+| State writes | `upsertMany` per frame | Unchanged — already batched |
+| React rendering | All 6 panels always mounted | Virtualized panel list, only visible symbols rendered |
+| Ring buffer | 1 shared 256-slot queue | Per-symbol queues, or per-connection queues, to prevent hot-symbol starvation |
+
+Memory is not the bottleneck: 50 order books × 1000 levels × 16 bytes ≈ 800 KB. Acceptable. The trade rolling window at 50 symbols × 50 trades × ~200 bytes ≈ 500 KB. Also acceptable.
+
+---
